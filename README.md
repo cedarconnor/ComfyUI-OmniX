@@ -59,32 +59,56 @@ pip install -r ComfyUI-OmniX/requirements.txt
 
 OmniX requires adapter weights in addition to the base Flux.1-dev model.
 
-### Directory Structure
+### Quick Download (3 Easy Steps)
 
-Place OmniX adapter weights in:
+1. **Ensure you have Flux.1-dev** (you likely already have this if using Flux in ComfyUI)
+
+2. **Download OmniX adapters** using one of these methods:
+
+   **Method A: Automatic Download (Recommended)**
+   ```bash
+   cd ComfyUI/custom_nodes/ComfyUI-OmniX
+   pip install huggingface_hub
+   python download_models.py
+   ```
+
+   **Method B: HuggingFace CLI**
+   ```bash
+   pip install huggingface_hub[cli]
+   huggingface-cli download KevinHuang/OmniX \
+       --local-dir ComfyUI/models/omnix/omnix-base
+   ```
+
+   **Method C: Manual Download**
+   - Visit: https://huggingface.co/KevinHuang/OmniX
+   - Download all `.safetensors` files and `config.json`
+   - Place in: `ComfyUI/models/omnix/omnix-base/`
+
+3. **Restart ComfyUI**
+
+📖 **Detailed Instructions:** See [MODEL_DOWNLOAD_GUIDE.md](MODEL_DOWNLOAD_GUIDE.md) for complete setup, file mappings, and troubleshooting.
+
+### Expected Directory Structure
+
 ```
-ComfyUI/models/omnix/omnix-base/
-├── config.json
-├── rgb_generation_adapter.safetensors
-├── distance_adapter.safetensors
-├── normal_adapter.safetensors
-├── albedo_adapter.safetensors
-├── roughness_adapter.safetensors
-└── metallic_adapter.safetensors
+ComfyUI/
+├── models/
+│   ├── checkpoints/
+│   │   └── flux1-dev.safetensors          # Base Flux model
+│   └── omnix/
+│       └── omnix-base/                     # OmniX adapters (~10GB)
+│           ├── config.json
+│           ├── rgb_adapter.safetensors
+│           ├── distance_adapter.safetensors
+│           ├── normal_adapter.safetensors
+│           ├── albedo_adapter.safetensors
+│           ├── roughness_adapter.safetensors
+│           └── metallic_adapter.safetensors
+└── custom_nodes/
+    └── ComfyUI-OmniX/                      # This repository
 ```
 
-### Downloading Adapter Weights
-
-**Option 1: HuggingFace (when available)**
-```bash
-# Will be available after official OmniX release
-# huggingface-cli download HKU-MMLab/OmniX --local-dir models/omnix/omnix-base
-```
-
-**Option 2: Manual Download**
-- Visit [OmniX GitHub](https://github.com/HKU-MMLab/OmniX)
-- Follow instructions for downloading adapter weights
-- Place files in `ComfyUI/models/omnix/omnix-base/`
+**Note:** File names in the HuggingFace repo may differ. See [MODEL_DOWNLOAD_GUIDE.md](MODEL_DOWNLOAD_GUIDE.md) for the complete file mapping.
 
 ### Model Size Requirements
 
