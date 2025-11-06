@@ -103,21 +103,38 @@ ComfyUI/
 
 ## File Naming Reference
 
-**IMPORTANT:** OmniX model files on HuggingFace may have different names than expected by our nodes. Here's the mapping:
+**IMPORTANT:** OmniX adapters are organized in **separate directories** on HuggingFace. Our download script automatically handles the organization and renaming.
 
-| HuggingFace File | Rename To | Purpose | Size |
-|-----------------|-----------|---------|------|
-| *To be updated based on actual repo* | | | |
+### HuggingFace Repository Structure
 
-**If files need renaming**, use this command:
+| HuggingFace Directory | Our Adapter Name | Purpose | Approx Size |
+|----------------------|------------------|---------|-------------|
+| `image_to_pano/` | `rgb_generation_adapter.safetensors` | Text/image → panorama | ~2GB |
+| `rgb_to_depth/` | `distance_adapter.safetensors` | Depth prediction | ~1.5GB |
+| `rgb_to_normal/` | `normal_adapter.safetensors` | Normal mapping | ~1.5GB |
+| `rgb_to_albedo/` | `albedo_adapter.safetensors` | Albedo extraction | ~1.5GB |
+| `rgb_to_pbr/` | `pbr_adapter.safetensors` | Roughness & metallic | ~2GB |
+| `rgb_to_semantic/` | `semantic_adapter.safetensors` | Segmentation | ~1.5GB |
+
+**Note:** The `rgb_to_pbr` directory contains a unified adapter for both roughness and metallic properties.
+
+### Manual Download & Renaming
+
+If downloading manually from https://huggingface.co/KevinHuang/OmniX/tree/main:
+
 ```bash
 cd ComfyUI/models/omnix/omnix-base/
 
-# Example renaming (update based on actual filenames):
-# mv omnix_rgb.safetensors rgb_adapter.safetensors
-# mv omnix_distance.safetensors distance_adapter.safetensors
-# etc.
+# Download each directory and extract the .safetensors file, then rename:
+# From image_to_pano/*.safetensors → rgb_generation_adapter.safetensors
+# From rgb_to_depth/*.safetensors → distance_adapter.safetensors
+# From rgb_to_normal/*.safetensors → normal_adapter.safetensors
+# From rgb_to_albedo/*.safetensors → albedo_adapter.safetensors
+# From rgb_to_pbr/*.safetensors → pbr_adapter.safetensors
+# From rgb_to_semantic/*.safetensors → semantic_adapter.safetensors
 ```
+
+**Recommended:** Use the automated `download_models.py` script which handles all renaming automatically!
 
 ---
 

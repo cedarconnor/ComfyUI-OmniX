@@ -58,8 +58,10 @@ class AdapterManager:
         "distance",
         "normal",
         "albedo",
-        "roughness",
-        "metallic",
+        "pbr",  # Unified PBR adapter (roughness + metallic)
+        "roughness",  # Legacy: falls back to pbr
+        "metallic",   # Legacy: falls back to pbr
+        "semantic",
     ]
 
     def __init__(self, adapter_dir: str, dtype: torch.dtype = torch.float16):
@@ -103,13 +105,20 @@ class AdapterManager:
         if adapter_type in self._loaded_adapters:
             return self._loaded_adapters[adapter_type]
 
+        # Handle legacy roughness/metallic -> pbr mapping
+        actual_adapter_type = adapter_type
+        if adapter_type in ["roughness", "metallic"]:
+            actual_adapter_type = "pbr"
+            print(f"Note: {adapter_type} uses unified PBR adapter")
+
         # Load from disk
-        adapter_path = self.adapter_dir / f"{adapter_type}_adapter.safetensors"
+        adapter_path = self.adapter_dir / f"{actual_adapter_type}_adapter.safetensors"
 
         if not adapter_path.exists():
             raise FileNotFoundError(
                 f"Adapter weights not found: {adapter_path}\n"
-                f"Expected file: {adapter_type}_adapter.safetensors"
+                f"Expected file: {actual_adapter_type}_adapter.safetensors\n"
+                f"Please run: python download_models.py"
             )
 
         try:
@@ -123,10 +132,12 @@ class AdapterManager:
             if torch.cuda.is_available():
                 adapter = adapter.cuda()
 
-            # Cache for future use
-            self._loaded_adapters[adapter_type] = adapter
+            # Cache for future use (cache under both names if legacy)
+            self._loaded_adapters[actual_adapter_type] = adapter
+            if adapter_type != actual_adapter_type:
+                self._loaded_adapters[adapter_type] = adapter
 
-            print(f"✓ Loaded {adapter_type} adapter: {len(state_dict)} weights")
+            print(f"✓ Loaded {actual_adapter_type} adapter: {len(state_dict)} weights")
 
             return adapter
 
