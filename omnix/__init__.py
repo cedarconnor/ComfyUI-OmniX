@@ -1,22 +1,20 @@
 """
 OmniX Core Implementation Module
 
-Version 0.2.0 - Phase 2 Implementation Complete
+Provides core functionality for OmniX panorama generation and perception:
+- Model loading (Flux + OmniX adapters)
+- Panorama generation (text-to-panorama, image-to-panorama)
+- Perception (depth, normals, materials extraction)
+- Adapters (RGB generation, perception adapters)
+- Utilities (format conversion, visualization)
 """
 
 __version__ = "0.2.0"
 
 from .adapters import AdapterManager, OmniXAdapters
-from .perceiver import OmniXPerceiver, PanoramaEncoder
-from .model_loader import OmniXModelLoader, OmniXConfig
-from .generator import OmniXPanoramaGenerator, GenerationConfig
-from .error_handling import (
-    OmniXError,
-    AdapterWeightsNotFoundError,
-    OutOfMemoryError,
-    ModelCompatibilityError,
-    InvalidPanoramaError
-)
+from .perceiver import OmniXPerceiver
+from .model_loader import OmniXModelLoader, load_flux_model, load_omnix_model
+from .generator import OmniXPanoramaGenerator, create_generator
 from .utils import (
     to_comfyui_image,
     from_comfyui_image,
@@ -26,19 +24,23 @@ from .utils import (
 )
 
 __all__ = [
+    # Adapters
     'AdapterManager',
     'OmniXAdapters',
-    'OmniXPerceiver',
-    'PanoramaEncoder',
+
+    # Model loading
     'OmniXModelLoader',
-    'OmniXConfig',
+    'load_flux_model',
+    'load_omnix_model',
+
+    # Generation
     'OmniXPanoramaGenerator',
-    'GenerationConfig',
-    'OmniXError',
-    'AdapterWeightsNotFoundError',
-    'OutOfMemoryError',
-    'ModelCompatibilityError',
-    'InvalidPanoramaError',
+    'create_generator',
+
+    # Perception
+    'OmniXPerceiver',
+
+    # Utilities
     'to_comfyui_image',
     'from_comfyui_image',
     'validate_panorama_aspect_ratio',
