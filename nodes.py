@@ -12,6 +12,8 @@ import os
 
 from .omnix.adapters import AdapterManager, OmniXAdapters
 from .omnix.perceiver import OmniXPerceiver
+from .omnix.model_loader import OmniXModelLoader as ModelLoader, load_flux_model
+from .omnix.generator import OmniXPanoramaGenerator
 from .omnix.utils import (
     to_comfyui_image,
     from_comfyui_image,
@@ -209,18 +211,39 @@ class OmniXPanoramaPerception:
             print(f"Running OmniX perception: {', '.join(extract_modes)}")
             results = perceiver.perceive(panorama, extract_modes)
 
-            # Format outputs (None if not extracted)
+            # Create placeholder for disabled outputs (black image with same dimensions)
+            batch_size, height, width, channels = panorama.shape
+            device = panorama.device
+            dtype = panorama.dtype
+
+            def create_placeholder(num_channels=1):
+                """Create black placeholder tensor for disabled outputs"""
+                return torch.zeros((batch_size, height, width, num_channels), device=device, dtype=dtype)
+
+            # Format outputs (black placeholder if not extracted)
             distance = results.get("distance")
             if distance is not None:
                 distance = visualize_depth_map(distance)
+            else:
+                distance = create_placeholder(1)  # Single channel for distance
 
             normal = results.get("normal")
             if normal is not None:
                 normal = normalize_normal_map(normal)
+            else:
+                normal = create_placeholder(3)  # Three channels for normal (RGB)
 
             albedo = results.get("albedo")
+            if albedo is None:
+                albedo = create_placeholder(3)  # Three channels for albedo (RGB)
+
             roughness = results.get("roughness")
+            if roughness is None:
+                roughness = create_placeholder(1)  # Single channel for roughness
+
             metallic = results.get("metallic")
+            if metallic is None:
+                metallic = create_placeholder(1)  # Single channel for metallic
 
             print(f"✓ Extracted {len(results)} property maps from panorama")
 
@@ -340,8 +363,191 @@ class OmniXPanoramaValidator:
         return (image, info)
 
 
+class OmniXModelLoaderNode:
+    """
+    Loads Flux.1-dev model with OmniX adapters for panorama generation.
+    This is the main model loader that combines Flux + OmniX into a unified model.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        import folder_paths
+        return {
+            "required": {
+                "flux_checkpoint": (folder_paths.get_filename_list("checkpoints"),),
+                "adapter_preset": (["omnix-base", "omnix-large"], {"default": "omnix-base"}),
+                "precision": (["fp32", "fp16", "bf16"], {"default": "fp16"}),
+            }
+        }
+
+    RETURN_TYPES = ("OMNIX_MODEL", "CLIP", "VAE")
+    RETURN_NAMES = ("omnix_model", "clip", "vae")
+    FUNCTION = "load_model"
+    CATEGORY = "OmniX"
+    DESCRIPTION = "Load Flux.1-dev with OmniX adapters for panorama generation"
+
+    def load_model(self, flux_checkpoint: str, adapter_preset: str, precision: str):
+        """Load Flux model with OmniX adapters"""
+        try:
+            # Determine dtype
+            dtype_map = {
+                "fp32": torch.float32,
+                "fp16": torch.float16,
+                "bf16": torch.bfloat16
+            }
+            dtype = dtype_map.get(precision, torch.float16)
+
+            # Load Flux model
+            print(f"Loading Flux checkpoint: {flux_checkpoint}")
+            model, clip, vae = load_flux_model(flux_checkpoint)
+
+            # Find adapter path
+            adapter_base_path = folder_paths.get_folder_paths("omnix")
+            if not adapter_base_path:
+                # Fallback to custom_nodes directory
+                adapter_base_path = [os.path.join(
+                    os.path.dirname(__file__),
+                    "models",
+                    "omnix"
+                )]
+
+            adapter_path = os.path.join(adapter_base_path[0], adapter_preset)
+
+            # Create OmniX model loader
+            omnix_model = ModelLoader.from_comfyui(
+                model=model,
+                adapter_path=adapter_path,
+                vae=vae,
+                dtype=dtype
+            )
+
+            # Store CLIP for later use
+            omnix_model.clip = clip
+
+            print(f"✓ Loaded OmniX model: {flux_checkpoint} + {adapter_preset}")
+
+            return (omnix_model, clip, vae)
+
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load OmniX model: {str(e)}\n"
+                f"Ensure Flux checkpoint and OmniX adapters are installed correctly."
+            )
+
+
+class OmniXPanoramaGeneratorNode:
+    """
+    Generates 360° panoramas from text prompts using OmniX.
+    Supports both text-to-panorama and image-to-panorama workflows.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "omnix_model": ("OMNIX_MODEL",),
+                "prompt": ("STRING", {"multiline": True, "default": "A beautiful landscape"}),
+                "width": ("INT", {
+                    "default": 2048,
+                    "min": 512,
+                    "max": 8192,
+                    "step": 64
+                }),
+                "height": ("INT", {
+                    "default": 1024,
+                    "min": 256,
+                    "max": 4096,
+                    "step": 64
+                }),
+                "seed": ("INT", {"default": -1, "min": -1, "max": 0xffffffff}),
+                "steps": ("INT", {"default": 20, "min": 1, "max": 100}),
+                "cfg": ("FLOAT", {
+                    "default": 3.5,
+                    "min": 0.0,
+                    "max": 20.0,
+                    "step": 0.1
+                }),
+                "sampler_name": (comfy.samplers.KSampler.SAMPLERS,),
+                "scheduler": (comfy.samplers.KSampler.SCHEDULERS,),
+                "denoise": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.01
+                }),
+            },
+            "optional": {
+                "negative_prompt": ("STRING", {
+                    "multiline": True,
+                    "default": ""
+                }),
+                "conditioning_image": ("IMAGE",),
+                "conditioning_strength": ("FLOAT", {
+                    "default": 0.8,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.05
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("panorama",)
+    FUNCTION = "generate"
+    CATEGORY = "OmniX"
+    DESCRIPTION = "Generate 360° panoramas from text prompts using OmniX"
+
+    def generate(
+        self,
+        omnix_model: ModelLoader,
+        prompt: str,
+        width: int,
+        height: int,
+        seed: int,
+        steps: int,
+        cfg: float,
+        sampler_name: str,
+        scheduler: str,
+        denoise: float,
+        negative_prompt: str = "",
+        conditioning_image: Optional[torch.Tensor] = None,
+        conditioning_strength: float = 0.8,
+    ) -> Tuple[torch.Tensor]:
+        """Generate panorama from text prompt"""
+
+        try:
+            # Create generator
+            generator = OmniXPanoramaGenerator(omnix_model)
+
+            # Generate panorama
+            panorama = generator.generate(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                seed=seed,
+                steps=steps,
+                cfg=cfg,
+                sampler_name=sampler_name,
+                scheduler=scheduler,
+                width=width,
+                height=height,
+                denoise=denoise,
+                conditioning_image=conditioning_image,
+                conditioning_strength=conditioning_strength,
+            )
+
+            return (panorama,)
+
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to generate panorama: {str(e)}\n"
+                f"Check that the model is loaded correctly and parameters are valid."
+            )
+
+
 # Node registration
 NODE_CLASS_MAPPINGS = {
+    "OmniXModelLoader": OmniXModelLoaderNode,
+    "OmniXPanoramaGenerator": OmniXPanoramaGeneratorNode,
     "OmniXAdapterLoader": OmniXAdapterLoader,
     "OmniXApplyAdapters": OmniXApplyAdapters,
     "OmniXPanoramaPerception": OmniXPanoramaPerception,
@@ -349,6 +555,8 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "OmniXModelLoader": "OmniX Model Loader",
+    "OmniXPanoramaGenerator": "OmniX Panorama Generator",
     "OmniXAdapterLoader": "OmniX Adapter Loader",
     "OmniXApplyAdapters": "OmniX Apply Adapters",
     "OmniXPanoramaPerception": "OmniX Panorama Perception",
