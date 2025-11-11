@@ -8,6 +8,7 @@ torchvision>=0.15.0
 # Model loading and inference
 safetensors>=0.4.0
 accelerate>=0.24.0
+huggingface_hub>=0.20.0
 
 # Utilities
 numpy>=1.24.0
