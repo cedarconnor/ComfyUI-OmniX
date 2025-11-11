@@ -9,6 +9,8 @@ Provides core functionality for OmniX panorama generation and perception:
 - Utilities (format conversion, visualization)
 """
 
+__version__ = "0.2.0"
+
 from .adapters import AdapterManager, OmniXAdapters
 from .perceiver import OmniXPerceiver
 from .model_loader import OmniXModelLoader, load_flux_model, load_omnix_model

@@ -21,7 +21,12 @@ import shutil
 
 
 # HuggingFace repository
-REPO_ID = "KevinHuang/OmniX"
+# NOTE: This is a placeholder. The actual OmniX repository may be different.
+# Check https://github.com/HKU-MMLab/OmniX for official release information.
+REPO_ID = "KevinHuang/OmniX"  # Update with actual repository when available
+
+# Alternative: Official OmniX repository (update when released)
+OFFICIAL_REPO = "HKU-MMLab/OmniX"
 
 # Adapter directory mapping (HuggingFace dir -> our adapter name)
 ADAPTER_DIR_MAP = {
@@ -62,6 +67,15 @@ def download_adapter_directory(repo_id: str, adapter_dir: str, output_dir: Path)
     print(f"\n📦 Downloading {adapter_dir}...")
 
     try:
+        # Try to check if repository exists first
+        from huggingface_hub import repo_exists
+
+        if not repo_exists(repo_id=repo_id, repo_type="model"):
+            print(f"  ⚠️  Repository {repo_id} not found on HuggingFace")
+            print(f"  ℹ️  The official OmniX weights may not be publicly released yet.")
+            print(f"  ℹ️  Check https://github.com/HKU-MMLab/OmniX for updates")
+            return False
+
         # Download the specific directory
         local_path = snapshot_download(
             repo_id=repo_id,
@@ -105,7 +119,26 @@ def download_adapter_directory(repo_id: str, adapter_dir: str, output_dir: Path)
         return True
 
     except Exception as e:
-        print(f"  ❌ Failed to download {adapter_dir}: {e}")
+        error_msg = str(e)
+        print(f"  ❌ Failed to download {adapter_dir}: {error_msg}")
+
+        # Provide helpful error messages
+        if "Repository Not Found" in error_msg or "404" in error_msg:
+            print(f"\n  ℹ️  Troubleshooting:")
+            print(f"     - OmniX weights may not be publicly released yet")
+            print(f"     - Check https://arxiv.org/abs/2510.26800 for paper")
+            print(f"     - Check https://github.com/HKU-MMLab/OmniX for official release")
+            print(f"     - If you have access to weights, place them manually in:")
+            print(f"       {output_dir}/{adapter_name}_adapter.safetensors")
+        elif "Unauthorized" in error_msg or "403" in error_msg:
+            print(f"\n  ℹ️  Repository requires authentication:")
+            print(f"     Run: huggingface-cli login")
+        elif "Connection" in error_msg or "timeout" in error_msg.lower():
+            print(f"\n  ℹ️  Network error:")
+            print(f"     - Check internet connection")
+            print(f"     - Try again later")
+            print(f"     - Use VPN if HuggingFace is blocked")
+
         return False
 
 
