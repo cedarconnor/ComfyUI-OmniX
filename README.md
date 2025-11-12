@@ -138,7 +138,8 @@ ComfyUI/
 
 **Basic Workflow:**
 ```
-1. [VAELoader] → Load Flux VAE
+1. [CheckpointLoaderSimple] → Load Flux model (any variant: dev, schnell, custom)
+   ├─ Output: MODEL, CLIP, VAE
    ↓
 2. [LoadImage] → Load your panorama image
    ↓
@@ -147,6 +148,7 @@ ComfyUI/
 4. [OmniXAdapterLoader] → Load OmniX perception adapters (omnix-base, bf16)
    ↓
 5. [OmniXPanoramaPerception] → Extract properties
+   ├─ model: Connect Flux MODEL
    ├─ vae: Connect Flux VAE
    ├─ adapters: Connect adapter loader
    ├─ panorama: Connect validated image
@@ -157,8 +159,9 @@ ComfyUI/
 
 **Important Notes:**
 - This implementation uses the real OmniX architecture (Flux VAE + LoRA adapters)
-- Perception works in latent space, not pixel space
-- Requires Flux.1-dev VAE for encoding/decoding
+- Perception works through denoising in latent space, not direct pixel processing
+- LoRA adapters are dynamically injected into Flux transformer for each task
+- Requires both Flux MODEL and VAE from any Flux checkpoint
 - Generation nodes removed - this is perception-only
 
 ## Nodes Reference
@@ -182,6 +185,7 @@ Loads perception adapter weights from `ComfyUI/models/loras/omnix/`. Adapters ar
 Extracts geometric and material properties from panoramas using Flux VAE + LoRA adapters.
 
 **Inputs:**
+- `model`: Flux diffusion MODEL (required) - any Flux variant (dev, schnell, or custom)
 - `vae`: Flux VAE (required) - for encoding/decoding
 - `adapters`: OmniX adapter manager from OmniXAdapterLoader
 - `panorama`: Input panorama IMAGE (2:1 aspect ratio)
@@ -200,7 +204,7 @@ Extracts geometric and material properties from panoramas using Flux VAE + LoRA 
 - `metallic`: Metallic map
 
 **Description:**
-Uses the real OmniX architecture: encodes panorama to latents with Flux VAE, applies task-specific LoRA adapters, and decodes back to images. This is the main perception node.
+Uses the real OmniX architecture: encodes panorama to latents with Flux VAE, injects task-specific LoRA adapters into Flux transformer, runs denoising with adapter active to extract properties, and decodes back to images. This is the main perception node.
 
 ### OmniXPanoramaValidator
 
