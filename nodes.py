@@ -16,7 +16,7 @@ import comfy.model_management as model_management
 import comfy.utils
 from comfy.sd import VAE
 
-from .omnix.adapters_new import AdapterManager, ADAPTER_FILENAMES
+from .omnix.adapters import AdapterManager, ADAPTER_FILENAMES
 from .omnix.utils import validate_panorama_aspect_ratio
 
 
