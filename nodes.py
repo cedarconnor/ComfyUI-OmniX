@@ -64,8 +64,7 @@ class OmniXPerceptionPipeline:
         """
         print(f"[Perception] Input image shape: {image.shape}, dtype: {image.dtype}")
 
-        # ComfyUI images are (B, H, W, C), need to convert to (B, C, H, W) for VAE
-        # Ensure we have the right format
+        # Validate format
         if len(image.shape) != 4:
             raise ValueError(f"Expected 4D tensor, got shape {image.shape}")
 
@@ -74,23 +73,18 @@ class OmniXPerceptionPipeline:
         if channels != 3:
             raise ValueError(f"Expected 3 channels, got {channels}")
 
-        # Convert to (B, C, H, W)
-        image = image.permute(0, 3, 1, 2).contiguous()
-        print(f"[Perception] After permute: {image.shape}")
+        # ComfyUI's VAE.encode() expects images in (B, H, W, C) format
+        # It handles the conversion to (B, C, H, W) internally
+        # Just slice to ensure 3 channels like the built-in VAEEncode node does
+        pixels = image[:, :, :, :3]
 
-        # Ensure correct dtype and device
-        image = image.to(device=self.device, dtype=self.dtype)
+        print(f"[Perception] Encoding pixels shape: {pixels.shape}")
 
-        # Normalize to [-1, 1] range for VAE (ComfyUI images are in [0, 1])
-        image = image * 2.0 - 1.0
-
-        print(f"[Perception] Encoding to latents (VAE expects {image.shape})...")
-
-        # Encode using VAE
+        # Encode using VAE (ComfyUI format)
         with torch.no_grad():
-            latents = self.vae.encode(image)
+            latents = self.vae.encode(pixels)
 
-        print(f"[Perception] Encoded image {image.shape} -> latents {latents.shape}")
+        print(f"[Perception] Encoded to latents shape: {latents.shape}")
 
         return latents
 
@@ -99,25 +93,25 @@ class OmniXPerceptionPipeline:
         Decode latents to image using Flux VAE.
 
         Args:
-            latents: Latent tensor (B, C_latent, H_latent, W_latent)
+            latents: Latent tensor
 
         Returns:
             Image (B, H, W, C) in [0, 1] range (ComfyUI format)
         """
-        # Decode using VAE
+        print(f"[Perception] Decoding latents shape: {latents.shape}")
+
+        # ComfyUI's VAE.decode() expects raw latent tensor
+        # and returns images in (B, H, W, C) format automatically
         with torch.no_grad():
-            image = self.vae.decode(latents)
+            images = self.vae.decode(latents)
 
-        # Denormalize from [-1, 1] to [0, 1]
-        image = (image + 1.0) / 2.0
-        image = torch.clamp(image, 0.0, 1.0)
+        # Handle batch combining if needed (from VAEDecode node)
+        if len(images.shape) == 5:  # Combine batches
+            images = images.reshape(-1, images.shape[-3], images.shape[-2], images.shape[-1])
 
-        # Convert from torch format (B, C, H, W) to ComfyUI format (B, H, W, C)
-        image = image.permute(0, 2, 3, 1)
+        print(f"[Perception] Decoded to images shape: {images.shape}")
 
-        print(f"[Perception] Decoded latents {latents.shape} -> image {image.shape}")
-
-        return image
+        return images
 
     def perceive(
         self,
