@@ -286,9 +286,12 @@ class OmniXPerceiver:
             # Run adapter to get feature map
             adapter_features = adapter(features)
 
-            # Ensure float dtype for subsequent operations
+            # Ensure float dtype and move to decoder device
+            device = next(self.decoder_distance.parameters()).device
             if adapter_features.dtype not in [torch.float32, torch.float64]:
-                adapter_features = adapter_features.to(torch.float32)
+                adapter_features = adapter_features.to(device=device, dtype=torch.float32)
+            else:
+                adapter_features = adapter_features.to(device=device)
 
             # Decode features to distance map using decoder head
             distance = self.decoder_distance(adapter_features)
@@ -314,9 +317,12 @@ class OmniXPerceiver:
             # Run adapter to get feature map
             adapter_features = adapter(features)
 
-            # Ensure float dtype for subsequent operations
+            # Ensure float dtype and move to decoder device
+            device = next(self.decoder_normal.parameters()).device
             if adapter_features.dtype not in [torch.float32, torch.float64]:
-                adapter_features = adapter_features.to(torch.float32)
+                adapter_features = adapter_features.to(device=device, dtype=torch.float32)
+            else:
+                adapter_features = adapter_features.to(device=device)
 
             # Decode features to normal map using decoder head
             normal = self.decoder_normal(adapter_features)
@@ -342,9 +348,12 @@ class OmniXPerceiver:
             # Run adapter to get feature map
             adapter_features = adapter(features)
 
-            # Ensure float dtype for subsequent operations
+            # Ensure float dtype and move to decoder device
+            device = next(self.decoder_albedo.parameters()).device
             if adapter_features.dtype not in [torch.float32, torch.float64]:
-                adapter_features = adapter_features.to(torch.float32)
+                adapter_features = adapter_features.to(device=device, dtype=torch.float32)
+            else:
+                adapter_features = adapter_features.to(device=device)
 
             # Decode features to albedo map using decoder head
             albedo = self.decoder_albedo(adapter_features)
@@ -370,9 +379,12 @@ class OmniXPerceiver:
             # Run adapter to get feature map
             adapter_features = adapter(features)
 
-            # Ensure float dtype for subsequent operations
+            # Ensure float dtype and move to decoder device
+            device = next(self.decoder_roughness.parameters()).device
             if adapter_features.dtype not in [torch.float32, torch.float64]:
-                adapter_features = adapter_features.to(torch.float32)
+                adapter_features = adapter_features.to(device=device, dtype=torch.float32)
+            else:
+                adapter_features = adapter_features.to(device=device)
 
             # Decode features to roughness map using decoder head
             roughness = self.decoder_roughness(adapter_features)
@@ -398,9 +410,12 @@ class OmniXPerceiver:
             # Run adapter to get feature map
             adapter_features = adapter(features)
 
-            # Ensure float dtype for subsequent operations
+            # Ensure float dtype and move to decoder device
+            device = next(self.decoder_metallic.parameters()).device
             if adapter_features.dtype not in [torch.float32, torch.float64]:
-                adapter_features = adapter_features.to(torch.float32)
+                adapter_features = adapter_features.to(device=device, dtype=torch.float32)
+            else:
+                adapter_features = adapter_features.to(device=device)
 
             # Decode features to metallic map using decoder head
             metallic = self.decoder_metallic(adapter_features)

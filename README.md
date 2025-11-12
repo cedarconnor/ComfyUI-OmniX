@@ -130,8 +130,10 @@ ComfyUI/
 
 ### Basic Text-to-Panorama Workflow
 
+**Note:** OmniX works with **any Flux model loader** - use your preferred Flux variant (dev, schnell, fp8, etc.)!
+
 ```
-1. [CheckpointLoaderSimple] → Load Flux.1-dev model
+1. [CheckpointLoaderSimple/UNETLoader/DiffusionModelLoader] → Load any Flux model
    ↓
 2. [OmniXAdapterLoader] → Load OmniX adapters (preset: omnix-base, precision: fp16)
    ↓
@@ -145,6 +147,13 @@ ComfyUI/
    ↓
 7. [SaveImage] → Save your 360° panorama
 ```
+
+**Supported Flux Models:**
+- Flux.1-dev (standard)
+- Flux.1-schnell (faster)
+- Flux fp8 variants (lower VRAM)
+- Any Flux-based custom models
+- Use any ComfyUI model loader node that outputs a `MODEL` type
 
 ### Panorama Perception Workflow
 
