@@ -12,6 +12,26 @@ from .adapters import OmniXAdapters, AdapterModule
 from .utils import from_comfyui_image, to_comfyui_image
 
 
+class DecoderHead(nn.Module):
+    """
+    Simple decoder head to convert adapter features to output maps.
+    Adapters output 256-channel features that need to be decoded to final maps.
+    """
+
+    def __init__(self, in_channels: int = 256, out_channels: int = 1):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_channels, 128, kernel_size=3, padding=1)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(128, out_channels, kernel_size=1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Decode features to output map"""
+        x = self.conv1(x)
+        x = self.relu(x)
+        x = self.conv2(x)
+        return x
+
+
 class PanoramaEncoder(nn.Module):
     """
     Encodes panorama images into feature representations.
@@ -193,9 +213,22 @@ class OmniXPerceiver:
         self.adapters = adapters
         self.encoder = PanoramaEncoder()
 
-        # Move encoder to GPU if available
+        # Create decoder heads for each output type
+        # Adapters output 256-channel features that need decoding
+        self.decoder_distance = DecoderHead(in_channels=256, out_channels=1)
+        self.decoder_normal = DecoderHead(in_channels=256, out_channels=3)
+        self.decoder_albedo = DecoderHead(in_channels=256, out_channels=3)
+        self.decoder_roughness = DecoderHead(in_channels=256, out_channels=1)
+        self.decoder_metallic = DecoderHead(in_channels=256, out_channels=1)
+
+        # Move encoder and decoders to GPU if available
         if torch.cuda.is_available():
             self.encoder = self.encoder.cuda()
+            self.decoder_distance = self.decoder_distance.cuda()
+            self.decoder_normal = self.decoder_normal.cuda()
+            self.decoder_albedo = self.decoder_albedo.cuda()
+            self.decoder_roughness = self.decoder_roughness.cuda()
+            self.decoder_metallic = self.decoder_metallic.cuda()
 
     def perceive(
         self,
@@ -250,16 +283,15 @@ class OmniXPerceiver:
         adapter = self.adapters.get_adapter("distance")
 
         with torch.no_grad():
-            # Run adapter
-            distance = adapter(features)
+            # Run adapter to get feature map
+            adapter_features = adapter(features)
 
             # Ensure float dtype for subsequent operations
-            if distance.dtype not in [torch.float32, torch.float64]:
-                distance = distance.to(torch.float32)
+            if adapter_features.dtype not in [torch.float32, torch.float64]:
+                adapter_features = adapter_features.to(torch.float32)
 
-            # Ensure single channel output
-            if distance.shape[1] != 1:  # If multiple channels, average
-                distance = distance.mean(dim=1, keepdim=True)
+            # Decode features to distance map using decoder head
+            distance = self.decoder_distance(adapter_features)
 
             # Convert to ComfyUI format (B, H, W, C)
             distance = distance.permute(0, 2, 3, 1)
@@ -279,16 +311,15 @@ class OmniXPerceiver:
         adapter = self.adapters.get_adapter("normal")
 
         with torch.no_grad():
-            # Run adapter
-            normal = adapter(features)
+            # Run adapter to get feature map
+            adapter_features = adapter(features)
 
             # Ensure float dtype for subsequent operations
-            if normal.dtype not in [torch.float32, torch.float64]:
-                normal = normal.to(torch.float32)
+            if adapter_features.dtype not in [torch.float32, torch.float64]:
+                adapter_features = adapter_features.to(torch.float32)
 
-            # Ensure 3 channels (x, y, z)
-            if normal.shape[1] != 3:
-                raise ValueError(f"Normal adapter output unexpected shape: {normal.shape}")
+            # Decode features to normal map using decoder head
+            normal = self.decoder_normal(adapter_features)
 
             # Convert to ComfyUI format (B, H, W, C)
             normal = normal.permute(0, 2, 3, 1)
@@ -308,17 +339,15 @@ class OmniXPerceiver:
         adapter = self.adapters.get_adapter("albedo")
 
         with torch.no_grad():
-            # Run adapter
-            albedo = adapter(features)
+            # Run adapter to get feature map
+            adapter_features = adapter(features)
 
             # Ensure float dtype for subsequent operations
-            if albedo.dtype not in [torch.float32, torch.float64]:
-                albedo = albedo.to(torch.float32)
+            if adapter_features.dtype not in [torch.float32, torch.float64]:
+                adapter_features = adapter_features.to(torch.float32)
 
-            # Ensure 3 channels (RGB)
-            if albedo.shape[1] != 3:
-                # If single channel, replicate to 3
-                albedo = albedo.repeat(1, 3, 1, 1)
+            # Decode features to albedo map using decoder head
+            albedo = self.decoder_albedo(adapter_features)
 
             # Convert to ComfyUI format (B, H, W, C)
             albedo = albedo.permute(0, 2, 3, 1)
@@ -338,16 +367,15 @@ class OmniXPerceiver:
         adapter = self.adapters.get_adapter("roughness")
 
         with torch.no_grad():
-            # Run adapter
-            roughness = adapter(features)
+            # Run adapter to get feature map
+            adapter_features = adapter(features)
 
             # Ensure float dtype for subsequent operations
-            if roughness.dtype not in [torch.float32, torch.float64]:
-                roughness = roughness.to(torch.float32)
+            if adapter_features.dtype not in [torch.float32, torch.float64]:
+                adapter_features = adapter_features.to(torch.float32)
 
-            # Ensure single channel output
-            if roughness.shape[1] != 1:
-                roughness = roughness.mean(dim=1, keepdim=True)
+            # Decode features to roughness map using decoder head
+            roughness = self.decoder_roughness(adapter_features)
 
             # Convert to ComfyUI format (B, H, W, C)
             roughness = roughness.permute(0, 2, 3, 1)
@@ -367,16 +395,15 @@ class OmniXPerceiver:
         adapter = self.adapters.get_adapter("metallic")
 
         with torch.no_grad():
-            # Run adapter
-            metallic = adapter(features)
+            # Run adapter to get feature map
+            adapter_features = adapter(features)
 
             # Ensure float dtype for subsequent operations
-            if metallic.dtype not in [torch.float32, torch.float64]:
-                metallic = metallic.to(torch.float32)
+            if adapter_features.dtype not in [torch.float32, torch.float64]:
+                adapter_features = adapter_features.to(torch.float32)
 
-            # Ensure single channel output
-            if metallic.shape[1] != 1:
-                metallic = metallic.mean(dim=1, keepdim=True)
+            # Decode features to metallic map using decoder head
+            metallic = self.decoder_metallic(adapter_features)
 
             # Convert to ComfyUI format (B, H, W, C)
             metallic = metallic.permute(0, 2, 3, 1)
