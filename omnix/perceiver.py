@@ -253,6 +253,10 @@ class OmniXPerceiver:
             # Run adapter
             distance = adapter(features)
 
+            # Ensure float dtype for subsequent operations
+            if distance.dtype not in [torch.float32, torch.float64]:
+                distance = distance.to(torch.float32)
+
             # Ensure single channel output
             if distance.shape[1] != 1:  # If multiple channels, average
                 distance = distance.mean(dim=1, keepdim=True)
@@ -278,6 +282,10 @@ class OmniXPerceiver:
             # Run adapter
             normal = adapter(features)
 
+            # Ensure float dtype for subsequent operations
+            if normal.dtype not in [torch.float32, torch.float64]:
+                normal = normal.to(torch.float32)
+
             # Ensure 3 channels (x, y, z)
             if normal.shape[1] != 3:
                 raise ValueError(f"Normal adapter output unexpected shape: {normal.shape}")
@@ -302,6 +310,10 @@ class OmniXPerceiver:
         with torch.no_grad():
             # Run adapter
             albedo = adapter(features)
+
+            # Ensure float dtype for subsequent operations
+            if albedo.dtype not in [torch.float32, torch.float64]:
+                albedo = albedo.to(torch.float32)
 
             # Ensure 3 channels (RGB)
             if albedo.shape[1] != 3:
@@ -329,6 +341,10 @@ class OmniXPerceiver:
             # Run adapter
             roughness = adapter(features)
 
+            # Ensure float dtype for subsequent operations
+            if roughness.dtype not in [torch.float32, torch.float64]:
+                roughness = roughness.to(torch.float32)
+
             # Ensure single channel output
             if roughness.shape[1] != 1:
                 roughness = roughness.mean(dim=1, keepdim=True)
@@ -354,6 +370,10 @@ class OmniXPerceiver:
             # Run adapter
             metallic = adapter(features)
 
+            # Ensure float dtype for subsequent operations
+            if metallic.dtype not in [torch.float32, torch.float64]:
+                metallic = metallic.to(torch.float32)
+
             # Ensure single channel output
             if metallic.shape[1] != 1:
                 metallic = metallic.mean(dim=1, keepdim=True)
@@ -376,6 +396,10 @@ class OmniXPerceiver:
         Returns:
             Normalized distance in [0, 1] range
         """
+        # Ensure distance is float for quantile operation
+        if distance.dtype not in [torch.float32, torch.float64]:
+            distance = distance.to(torch.float32)
+
         # Remove outliers (clip to percentiles)
         distance_flat = distance.flatten()
         p1 = torch.quantile(distance_flat, 0.01)
