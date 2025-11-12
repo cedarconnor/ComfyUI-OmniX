@@ -62,15 +62,29 @@ class OmniXPerceptionPipeline:
         Returns:
             Latents (B, C_latent, H_latent, W_latent)
         """
-        # Convert from ComfyUI format (B, H, W, C) to torch format (B, C, H, W)
-        if image.shape[-1] == 3:
-            image = image.permute(0, 3, 1, 2)
+        print(f"[Perception] Input image shape: {image.shape}, dtype: {image.dtype}")
+
+        # ComfyUI images are (B, H, W, C), need to convert to (B, C, H, W) for VAE
+        # Ensure we have the right format
+        if len(image.shape) != 4:
+            raise ValueError(f"Expected 4D tensor, got shape {image.shape}")
+
+        batch, height, width, channels = image.shape
+
+        if channels != 3:
+            raise ValueError(f"Expected 3 channels, got {channels}")
+
+        # Convert to (B, C, H, W)
+        image = image.permute(0, 3, 1, 2).contiguous()
+        print(f"[Perception] After permute: {image.shape}")
 
         # Ensure correct dtype and device
         image = image.to(device=self.device, dtype=self.dtype)
 
-        # Normalize to [-1, 1] range for VAE
+        # Normalize to [-1, 1] range for VAE (ComfyUI images are in [0, 1])
         image = image * 2.0 - 1.0
+
+        print(f"[Perception] Encoding to latents (VAE expects {image.shape})...")
 
         # Encode using VAE
         with torch.no_grad():
