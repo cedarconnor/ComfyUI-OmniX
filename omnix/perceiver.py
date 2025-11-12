@@ -14,21 +14,58 @@ from .utils import from_comfyui_image, to_comfyui_image
 
 class DecoderHead(nn.Module):
     """
-    Simple decoder head to convert adapter features to output maps.
-    Adapters output 256-channel features that need to be decoded to final maps.
+    Decoder head to convert adapter features to output maps with upsampling.
+    Adapters output 256-channel features that need to be decoded and upsampled
+    back to the original panorama resolution.
     """
 
-    def __init__(self, in_channels: int = 256, out_channels: int = 1):
+    def __init__(self, in_channels: int = 256, out_channels: int = 1, upsample_factor: int = 8):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels, 128, kernel_size=3, padding=1)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv2d(128, out_channels, kernel_size=1)
+        self.upsample_factor = upsample_factor
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Decode features to output map"""
+        # Decode features
+        self.conv1 = nn.Conv2d(in_channels, 128, kernel_size=3, padding=1)
+        self.relu1 = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(128, 64, kernel_size=3, padding=1)
+        self.relu2 = nn.ReLU(inplace=True)
+
+        # Final output layer
+        self.conv_out = nn.Conv2d(64, out_channels, kernel_size=1)
+
+    def forward(self, x: torch.Tensor, target_size: tuple = None) -> torch.Tensor:
+        """
+        Decode features to output map and upsample to target size.
+
+        Args:
+            x: Input features (B, C, H, W)
+            target_size: Target (height, width) for output. If None, upsamples by upsample_factor.
+
+        Returns:
+            Decoded output map at target resolution
+        """
+        # Decode features
         x = self.conv1(x)
-        x = self.relu(x)
+        x = self.relu1(x)
         x = self.conv2(x)
+        x = self.relu2(x)
+        x = self.conv_out(x)
+
+        # Upsample to target size
+        if target_size is not None:
+            x = torch.nn.functional.interpolate(
+                x,
+                size=target_size,
+                mode='bilinear',
+                align_corners=False
+            )
+        elif self.upsample_factor > 1:
+            x = torch.nn.functional.interpolate(
+                x,
+                scale_factor=self.upsample_factor,
+                mode='bilinear',
+                align_corners=False
+            )
+
         return x
 
 
@@ -252,6 +289,11 @@ class OmniXPerceiver:
         device = panorama.device
         results = {}
 
+        # Get original panorama size for upsampling decoder outputs
+        # panorama shape: (B, H, W, C)
+        batch_size, orig_height, orig_width, channels = panorama.shape
+        target_size = (orig_height, orig_width)
+
         # Encode panorama once (shared features)
         with torch.no_grad():
             features = self.encoder(panorama)
@@ -259,23 +301,27 @@ class OmniXPerceiver:
         # Run requested adapters
         for mode in extract_modes:
             if mode == "distance":
-                results["distance"] = self._extract_distance(features)
+                results["distance"] = self._extract_distance(features, target_size)
             elif mode == "normal":
-                results["normal"] = self._extract_normal(features)
+                results["normal"] = self._extract_normal(features, target_size)
             elif mode == "albedo":
-                results["albedo"] = self._extract_albedo(features)
+                results["albedo"] = self._extract_albedo(features, target_size)
             elif mode == "roughness":
-                results["roughness"] = self._extract_roughness(features)
+                results["roughness"] = self._extract_roughness(features, target_size)
             elif mode == "metallic":
-                results["metallic"] = self._extract_metallic(features)
+                results["metallic"] = self._extract_metallic(features, target_size)
             else:
                 print(f"Warning: Unknown perception mode '{mode}', skipping")
 
         return results
 
-    def _extract_distance(self, features: torch.Tensor) -> torch.Tensor:
+    def _extract_distance(self, features: torch.Tensor, target_size: tuple) -> torch.Tensor:
         """
         Extract distance (depth) map.
+
+        Args:
+            features: Encoded features from panorama
+            target_size: Target (height, width) for output
 
         Returns:
             Distance map (B, H, W, 1) in ComfyUI format
@@ -293,8 +339,8 @@ class OmniXPerceiver:
             else:
                 adapter_features = adapter_features.to(device=device)
 
-            # Decode features to distance map using decoder head
-            distance = self.decoder_distance(adapter_features)
+            # Decode features to distance map using decoder head (with upsampling)
+            distance = self.decoder_distance(adapter_features, target_size=target_size)
 
             # Convert to ComfyUI format (B, H, W, C)
             distance = distance.permute(0, 2, 3, 1)
@@ -304,9 +350,13 @@ class OmniXPerceiver:
 
         return distance
 
-    def _extract_normal(self, features: torch.Tensor) -> torch.Tensor:
+    def _extract_normal(self, features: torch.Tensor, target_size: tuple) -> torch.Tensor:
         """
         Extract normal map (surface normals).
+
+        Args:
+            features: Encoded features from panorama
+            target_size: Target (height, width) for output
 
         Returns:
             Normal map (B, H, W, 3) in ComfyUI format, range [-1, 1]
@@ -324,8 +374,8 @@ class OmniXPerceiver:
             else:
                 adapter_features = adapter_features.to(device=device)
 
-            # Decode features to normal map using decoder head
-            normal = self.decoder_normal(adapter_features)
+            # Decode features to normal map using decoder head (with upsampling)
+            normal = self.decoder_normal(adapter_features, target_size=target_size)
 
             # Convert to ComfyUI format (B, H, W, C)
             normal = normal.permute(0, 2, 3, 1)
@@ -335,9 +385,13 @@ class OmniXPerceiver:
 
         return normal
 
-    def _extract_albedo(self, features: torch.Tensor) -> torch.Tensor:
+    def _extract_albedo(self, features: torch.Tensor, target_size: tuple) -> torch.Tensor:
         """
         Extract albedo (base color/diffuse).
+
+        Args:
+            features: Encoded features from panorama
+            target_size: Target (height, width) for output
 
         Returns:
             Albedo map (B, H, W, 3) in ComfyUI format, range [0, 1]
@@ -355,8 +409,8 @@ class OmniXPerceiver:
             else:
                 adapter_features = adapter_features.to(device=device)
 
-            # Decode features to albedo map using decoder head
-            albedo = self.decoder_albedo(adapter_features)
+            # Decode features to albedo map using decoder head (with upsampling)
+            albedo = self.decoder_albedo(adapter_features, target_size=target_size)
 
             # Convert to ComfyUI format (B, H, W, C)
             albedo = albedo.permute(0, 2, 3, 1)
@@ -366,9 +420,13 @@ class OmniXPerceiver:
 
         return albedo
 
-    def _extract_roughness(self, features: torch.Tensor) -> torch.Tensor:
+    def _extract_roughness(self, features: torch.Tensor, target_size: tuple) -> torch.Tensor:
         """
         Extract roughness map (PBR material property).
+
+        Args:
+            features: Encoded features from panorama
+            target_size: Target (height, width) for output
 
         Returns:
             Roughness map (B, H, W, 1) in ComfyUI format, range [0, 1]
@@ -386,8 +444,8 @@ class OmniXPerceiver:
             else:
                 adapter_features = adapter_features.to(device=device)
 
-            # Decode features to roughness map using decoder head
-            roughness = self.decoder_roughness(adapter_features)
+            # Decode features to roughness map using decoder head (with upsampling)
+            roughness = self.decoder_roughness(adapter_features, target_size=target_size)
 
             # Convert to ComfyUI format (B, H, W, C)
             roughness = roughness.permute(0, 2, 3, 1)
@@ -397,9 +455,13 @@ class OmniXPerceiver:
 
         return roughness
 
-    def _extract_metallic(self, features: torch.Tensor) -> torch.Tensor:
+    def _extract_metallic(self, features: torch.Tensor, target_size: tuple) -> torch.Tensor:
         """
         Extract metallic map (PBR material property).
+
+        Args:
+            features: Encoded features from panorama
+            target_size: Target (height, width) for output
 
         Returns:
             Metallic map (B, H, W, 1) in ComfyUI format, range [0, 1]
@@ -417,8 +479,8 @@ class OmniXPerceiver:
             else:
                 adapter_features = adapter_features.to(device=device)
 
-            # Decode features to metallic map using decoder head
-            metallic = self.decoder_metallic(adapter_features)
+            # Decode features to metallic map using decoder head (with upsampling)
+            metallic = self.decoder_metallic(adapter_features, target_size=target_size)
 
             # Convert to ComfyUI format (B, H, W, C)
             metallic = metallic.permute(0, 2, 3, 1)
