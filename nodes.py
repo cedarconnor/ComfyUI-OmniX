@@ -119,8 +119,14 @@ class OmniXAdapterLoader:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "adapter_preset": (["omnix-base", "omnix-large"], {"default": "omnix-base"}),
-                "precision": (["fp32", "fp16", "bf16"], {"default": "fp16"}),
+                "adapter_preset": (["omnix-base", "omnix-large"], {
+                    "default": "omnix-base",
+                    "tooltip": "Model preset to load. omnix-base: standard adapters (~1.5GB). omnix-large: higher quality adapters (if available). Adapters must be downloaded to ComfyUI/models/loras/omnix/"
+                }),
+                "precision": (["fp32", "fp16", "bf16"], {
+                    "default": "fp16",
+                    "tooltip": "Precision for adapter weights. fp16: half precision (recommended, ~1.5GB VRAM). fp32: full precision (best quality, ~3GB VRAM). bf16: bfloat16 (good balance, requires modern GPU)"
+                }),
             }
         }
 
@@ -183,14 +189,22 @@ class OmniXApplyAdapters:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "model": ("MODEL",),
-                "adapters": ("OMNIX_ADAPTERS",),
-                "adapter_type": (["rgb_generation"], {"default": "rgb_generation"}),
+                "model": ("MODEL", {
+                    "tooltip": "Flux model from any loader (CheckpointLoader, UNETLoader, DiffusionModelLoader, etc.). Supports Flux.1-dev, Flux.1-schnell, fp8 variants, and custom Flux models"
+                }),
+                "adapters": ("OMNIX_ADAPTERS", {
+                    "tooltip": "OmniX adapter weights from OmniXAdapterLoader. Contains specialized adapters for different panorama tasks"
+                }),
+                "adapter_type": (["rgb_generation"], {
+                    "default": "rgb_generation",
+                    "tooltip": "Type of adapter to apply. rgb_generation: enables text/image-to-panorama generation (360° equirectangular output). Required for panorama synthesis workflows"
+                }),
                 "adapter_strength": ("FLOAT", {
                     "default": 1.0,
                     "min": 0.0,
                     "max": 2.0,
-                    "step": 0.05
+                    "step": 0.05,
+                    "tooltip": "Strength multiplier for adapter influence (0.0-2.0). 1.0: full adapter effect (recommended). <1.0: weaker panorama characteristics. >1.0: stronger but may cause artifacts. Adjust if results are too distorted or not panoramic enough"
                 }),
             }
         }
@@ -244,15 +258,34 @@ class OmniXPanoramaPerception:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "adapters": ("OMNIX_ADAPTERS",),
-                "panorama": ("IMAGE",),
+                "adapters": ("OMNIX_ADAPTERS", {
+                    "tooltip": "OmniX adapter weights from OmniXAdapterLoader. Must contain perception adapters (distance, normal, albedo, pbr) for property extraction"
+                }),
+                "panorama": ("IMAGE", {
+                    "tooltip": "Input panorama image to analyze. Should be equirectangular format (2:1 aspect ratio). Use OmniXPanoramaValidator first if aspect ratio is incorrect. Accepts generated panoramas or loaded images"
+                }),
             },
             "optional": {
-                "extract_distance": ("BOOLEAN", {"default": True}),
-                "extract_normal": ("BOOLEAN", {"default": True}),
-                "extract_albedo": ("BOOLEAN", {"default": True}),
-                "extract_roughness": ("BOOLEAN", {"default": True}),
-                "extract_metallic": ("BOOLEAN", {"default": True}),
+                "extract_distance": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Extract depth/distance map. Outputs single-channel grayscale image showing distance from camera. Useful for 3D reconstruction and scene understanding. ~224MB adapter required"
+                }),
+                "extract_normal": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Extract surface normal map (XYZ vectors). Outputs 3-channel RGB image where colors represent surface orientation. Essential for relighting, bump mapping, and 3D reconstruction. ~224MB adapter required"
+                }),
+                "extract_albedo": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Extract albedo/base color map. Outputs 3-channel RGB image of diffuse color without lighting. Core component of PBR materials for realistic rendering. ~224MB adapter required"
+                }),
+                "extract_roughness": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Extract roughness/glossiness map. Outputs single-channel grayscale image (0=smooth/glossy, 1=rough/matte). Part of PBR materials for realistic surface properties. Uses unified PBR adapter"
+                }),
+                "extract_metallic": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Extract metallic map. Outputs single-channel grayscale image (0=dielectric, 1=metallic). Part of PBR materials distinguishing metals from non-metals. Uses unified PBR adapter"
+                }),
             }
         }
 
@@ -355,14 +388,20 @@ class OmniXPanoramaValidator:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "image": ("IMAGE",),
+                "image": ("IMAGE", {
+                    "tooltip": "Input image to validate/fix. Can be any aspect ratio - will be adjusted to target ratio if needed"
+                }),
                 "target_aspect_ratio": ("FLOAT", {
                     "default": 2.0,
                     "min": 1.8,
                     "max": 2.2,
-                    "step": 0.1
+                    "step": 0.1,
+                    "tooltip": "Target aspect ratio (width/height). 2.0: standard equirectangular panorama (2:1). 1.9-2.1: acceptable range with tolerance. Panorama perception works best with 2:1 ratio"
                 }),
-                "fix_method": (["crop", "pad", "stretch"], {"default": "crop"}),
+                "fix_method": (["crop", "pad", "stretch"], {
+                    "default": "crop",
+                    "tooltip": "Method to fix incorrect aspect ratio. crop: remove edges (best quality, loses content). pad: add borders (preserves all content, adds padding). stretch: resize non-uniformly (no content loss, may distort). Use crop for best results"
+                }),
             }
         }
 
@@ -464,9 +503,17 @@ class OmniXModelLoaderNode:
         import folder_paths
         return {
             "required": {
-                "flux_checkpoint": (folder_paths.get_filename_list("checkpoints"),),
-                "adapter_preset": (["omnix-base", "omnix-large"], {"default": "omnix-base"}),
-                "precision": (["fp32", "fp16", "bf16"], {"default": "fp16"}),
+                "flux_checkpoint": (folder_paths.get_filename_list("checkpoints"), {
+                    "tooltip": "Flux checkpoint file from ComfyUI/models/checkpoints/. Supports Flux.1-dev, Flux.1-schnell, and fp8/fp16 variants. This all-in-one node loads both Flux and OmniX adapters. For more flexibility, use separate CheckpointLoader + OmniXAdapterLoader + OmniXApplyAdapters"
+                }),
+                "adapter_preset": (["omnix-base", "omnix-large"], {
+                    "default": "omnix-base",
+                    "tooltip": "OmniX adapter preset. omnix-base: standard quality adapters. omnix-large: higher quality (if available). Adapters are automatically loaded from ComfyUI/models/loras/omnix/"
+                }),
+                "precision": (["fp32", "fp16", "bf16"], {
+                    "default": "fp16",
+                    "tooltip": "Precision for both model and adapters. fp16: recommended, lowest VRAM (~12GB). fp32: highest quality, high VRAM (~24GB). bf16: balanced, modern GPUs only"
+                }),
             }
         }
 
@@ -539,48 +586,76 @@ class OmniXPanoramaGeneratorNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "omnix_model": ("OMNIX_MODEL",),
-                "prompt": ("STRING", {"multiline": True, "default": "A beautiful landscape"}),
+                "omnix_model": ("OMNIX_MODEL", {
+                    "tooltip": "Unified OmniX model from OmniXModelLoaderNode. Contains Flux base model + loaded adapters. Use this all-in-one node for simplified workflows, or use separate nodes (CheckpointLoader + OmniXAdapterLoader + OmniXApplyAdapters) for more control"
+                }),
+                "prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "A beautiful landscape",
+                    "tooltip": "Text description of the panorama to generate. Include '360 degree', 'equirectangular', or 'panorama' for best results. Describe the scene globally (avoid directional terms like 'left side'). Examples: 'futuristic cityscape at night, neon lights, cyberpunk', 'serene mountain landscape, sunrise, volumetric lighting'"
+                }),
                 "width": ("INT", {
                     "default": 2048,
                     "min": 512,
                     "max": 8192,
-                    "step": 64
+                    "step": 64,
+                    "tooltip": "Output width in pixels. Must maintain 2:1 ratio with height. Common: 2048 (standard), 4096 (high-res). Higher = more detail but slower generation and more VRAM. Recommended: 2048×1024"
                 }),
                 "height": ("INT", {
                     "default": 1024,
                     "min": 256,
                     "max": 4096,
-                    "step": 64
+                    "step": 64,
+                    "tooltip": "Output height in pixels. Must be width/2 for proper equirectangular format. Common: 1024 (with 2048 width), 2048 (with 4096 width). Incorrect ratio will produce distorted panoramas"
                 }),
-                "seed": ("INT", {"default": -1, "min": -1, "max": 0xffffffff}),
-                "steps": ("INT", {"default": 20, "min": 1, "max": 100}),
+                "seed": ("INT", {
+                    "default": -1,
+                    "min": -1,
+                    "max": 0xffffffff,
+                    "tooltip": "Random seed for generation. -1: random each time. Fixed number: reproducible results. Use same seed + settings to regenerate exact same panorama. Useful for iterating on prompts"
+                }),
+                "steps": ("INT", {
+                    "default": 20,
+                    "min": 1,
+                    "max": 100,
+                    "tooltip": "Diffusion sampling steps. More = better quality but slower. Flux optimal range: 20-50. Default 20 works well. <20: faster but lower quality. >50: diminishing returns. Flux.1-schnell can use 4-8 steps"
+                }),
                 "cfg": ("FLOAT", {
                     "default": 3.5,
                     "min": 0.0,
                     "max": 20.0,
-                    "step": 0.1
+                    "step": 0.1,
+                    "tooltip": "Classifier-Free Guidance scale. Controls prompt adherence. 3.5-7.5: good range. Lower (1-3): more creative, less faithful. Higher (8-15): follows prompt strictly but may over-saturate. Flux works well at lower CFG than SD models"
                 }),
-                "sampler_name": (comfy.samplers.KSampler.SAMPLERS,),
-                "scheduler": (comfy.samplers.KSampler.SCHEDULERS,),
+                "sampler_name": (comfy.samplers.KSampler.SAMPLERS, {
+                    "tooltip": "Sampling algorithm. euler: fast, good quality. dpm++ 2m: excellent quality. dpmpp_2m_sde: high quality, slower. euler_ancestral: more variation. Recommended: euler or dpm++ 2m"
+                }),
+                "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {
+                    "tooltip": "Noise schedule. Controls how noise is removed over steps. normal: standard, balanced. karras: often better quality. exponential: different curve. sgm_uniform: Flux native (recommended). Try different schedules if results look off"
+                }),
                 "denoise": ("FLOAT", {
                     "default": 1.0,
                     "min": 0.0,
                     "max": 1.0,
-                    "step": 0.01
+                    "step": 0.01,
+                    "tooltip": "Denoising strength. 1.0: full generation from noise (text-to-panorama). <1.0: less denoising, more influence from conditioning_image (img2img). Use 0.6-0.8 with conditioning_image for image-to-panorama"
                 }),
             },
             "optional": {
                 "negative_prompt": ("STRING", {
                     "multiline": True,
-                    "default": ""
+                    "default": "",
+                    "tooltip": "What NOT to include in panorama. Examples: 'blurry, distorted, seams, watermark, text, low quality'. Flux is less sensitive to negative prompts than SD models. Use sparingly"
                 }),
-                "conditioning_image": ("IMAGE",),
+                "conditioning_image": ("IMAGE", {
+                    "tooltip": "Optional reference image for image-to-panorama generation. When provided, output will be influenced by this image. Use with denoise 0.6-0.8. Image doesn't need to be 2:1 ratio (will be resized). Good for panorama variations or style transfer"
+                }),
                 "conditioning_strength": ("FLOAT", {
                     "default": 0.8,
                     "min": 0.0,
                     "max": 1.0,
-                    "step": 0.05
+                    "step": 0.05,
+                    "tooltip": "How much conditioning_image influences output (only used if conditioning_image provided). 0.0: ignore image. 1.0: maximum influence. 0.6-0.8: good balance. Higher = output closer to conditioning_image. Lower = more freedom to change"
                 }),
             }
         }
