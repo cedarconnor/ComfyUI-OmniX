@@ -346,9 +346,10 @@ class OmniXPanoramaPerception:
             # Format outputs (black placeholder if not extracted)
             distance = results.get("distance")
             if distance is not None:
+                # Convert to 3-channel colored visualization
                 distance = visualize_depth_map(distance)
             else:
-                distance = create_placeholder(1)  # Single channel for distance
+                distance = create_placeholder(3)  # 3-channel for ComfyUI compatibility
 
             normal = results.get("normal")
             if normal is not None:
@@ -361,12 +362,18 @@ class OmniXPanoramaPerception:
                 albedo = create_placeholder(3)  # Three channels for albedo (RGB)
 
             roughness = results.get("roughness")
-            if roughness is None:
-                roughness = create_placeholder(1)  # Single channel for roughness
+            if roughness is not None:
+                # Convert single-channel to 3-channel grayscale (B, H, W, 1) -> (B, H, W, 3)
+                roughness = roughness.repeat(1, 1, 1, 3)
+            else:
+                roughness = create_placeholder(3)  # 3-channel for ComfyUI compatibility
 
             metallic = results.get("metallic")
-            if metallic is None:
-                metallic = create_placeholder(1)  # Single channel for metallic
+            if metallic is not None:
+                # Convert single-channel to 3-channel grayscale (B, H, W, 1) -> (B, H, W, 3)
+                metallic = metallic.repeat(1, 1, 1, 3)
+            else:
+                metallic = create_placeholder(3)  # 3-channel for ComfyUI compatibility
 
             print(f"✓ Extracted {len(results)} property maps from panorama")
 
