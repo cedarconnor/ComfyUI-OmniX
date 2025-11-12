@@ -43,12 +43,16 @@ class DecoderHead(nn.Module):
         Returns:
             Decoded output map at target resolution
         """
+        input_shape = x.shape
+
         # Decode features
         x = self.conv1(x)
         x = self.relu1(x)
         x = self.conv2(x)
         x = self.relu2(x)
         x = self.conv_out(x)
+
+        decoded_shape = x.shape
 
         # Upsample to target size
         if target_size is not None:
@@ -58,6 +62,7 @@ class DecoderHead(nn.Module):
                 mode='bilinear',
                 align_corners=False
             )
+            print(f"[DecoderHead] Input: {input_shape} → Decoded: {decoded_shape} → Upsampled: {x.shape} (target: {target_size})")
         elif self.upsample_factor > 1:
             x = torch.nn.functional.interpolate(
                 x,
@@ -65,6 +70,9 @@ class DecoderHead(nn.Module):
                 mode='bilinear',
                 align_corners=False
             )
+            print(f"[DecoderHead] Input: {input_shape} → Decoded: {decoded_shape} → Upsampled: {x.shape} (factor: {self.upsample_factor})")
+        else:
+            print(f"[DecoderHead] Input: {input_shape} → Decoded: {decoded_shape} → No upsampling")
 
         return x
 
@@ -294,22 +302,36 @@ class OmniXPerceiver:
         batch_size, orig_height, orig_width, channels = panorama.shape
         target_size = (orig_height, orig_width)
 
+        print(f"[OmniX Perceiver] Input panorama shape: {panorama.shape}")
+        print(f"[OmniX Perceiver] Target output size: {target_size}")
+
         # Encode panorama once (shared features)
         with torch.no_grad():
             features = self.encoder(panorama)
+            print(f"[OmniX Perceiver] Encoded features shape: {features.shape}")
 
         # Run requested adapters
         for mode in extract_modes:
             if mode == "distance":
-                results["distance"] = self._extract_distance(features, target_size)
+                result = self._extract_distance(features, target_size)
+                print(f"[OmniX Perceiver] Distance output shape: {result.shape}")
+                results["distance"] = result
             elif mode == "normal":
-                results["normal"] = self._extract_normal(features, target_size)
+                result = self._extract_normal(features, target_size)
+                print(f"[OmniX Perceiver] Normal output shape: {result.shape}")
+                results["normal"] = result
             elif mode == "albedo":
-                results["albedo"] = self._extract_albedo(features, target_size)
+                result = self._extract_albedo(features, target_size)
+                print(f"[OmniX Perceiver] Albedo output shape: {result.shape}")
+                results["albedo"] = result
             elif mode == "roughness":
-                results["roughness"] = self._extract_roughness(features, target_size)
+                result = self._extract_roughness(features, target_size)
+                print(f"[OmniX Perceiver] Roughness output shape: {result.shape}")
+                results["roughness"] = result
             elif mode == "metallic":
-                results["metallic"] = self._extract_metallic(features, target_size)
+                result = self._extract_metallic(features, target_size)
+                print(f"[OmniX Perceiver] Metallic output shape: {result.shape}")
+                results["metallic"] = result
             else:
                 print(f"Warning: Unknown perception mode '{mode}', skipping")
 

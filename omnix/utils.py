@@ -104,6 +104,8 @@ def visualize_depth_map(depth: torch.Tensor) -> torch.Tensor:
     Returns:
         Colored depth map (B, H, W, 3) for visualization
     """
+    print(f"[visualize_depth_map] Input depth shape: {depth.shape}")
+
     # Ensure depth is in [0, 1] range
     depth_normalized = (depth - depth.min()) / (depth.max() - depth.min() + 1e-8)
 
@@ -111,22 +113,30 @@ def visualize_depth_map(depth: torch.Tensor) -> torch.Tensor:
     if depth_normalized.shape[-1] == 1:
         depth_normalized = depth_normalized.squeeze(-1)
 
+    print(f"[visualize_depth_map] After squeeze shape: {depth_normalized.shape}")
+
     # Convert to numpy for colormap
     depth_np = depth_normalized.cpu().numpy()
+
+    print(f"[visualize_depth_map] Numpy array shape: {depth_np.shape}")
 
     # Apply viridis colormap
     try:
         import matplotlib.cm as cm
         colormap = cm.get_cmap('viridis')
         colored = colormap(depth_np)[:, :, :, :3]  # Remove alpha channel
+        print(f"[visualize_depth_map] After colormap shape: {colored.shape}")
     except ImportError:
         # Fallback: simple grayscale if matplotlib not available
         print("Warning: matplotlib not available, using grayscale depth visualization")
         depth_np_expanded = np.stack([depth_np] * 3, axis=-1)
         colored = depth_np_expanded
+        print(f"[visualize_depth_map] Grayscale fallback shape: {colored.shape}")
 
     # Convert back to tensor
     colored_tensor = torch.from_numpy(colored).float()
+
+    print(f"[visualize_depth_map] Final output shape: {colored_tensor.shape}")
 
     return colored_tensor
 
