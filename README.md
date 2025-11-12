@@ -1,25 +1,26 @@
-NOT WORKING YET!!!!!!!!
+PERCEPTION-ONLY | WORK IN PROGRESS
 
 # ComfyUI-OmniX
 
 ![OmniX Banner](https://img.shields.io/badge/ComfyUI-OmniX-blue) ![Version](https://img.shields.io/badge/version-1.0.0-green) ![License](https://img.shields.io/badge/license-Apache%202.0-orange)
 
-**OmniX panorama generation and perception for ComfyUI**
+**OmniX panorama perception for ComfyUI**
 
-Generate stunning 360° equirectangular panoramas and extract comprehensive scene properties including depth, normals, and PBR materials using OmniX adapters with ComfyUI's Flux pipeline.
+Extract comprehensive scene properties from 360° equirectangular panoramas including depth, normals, and PBR materials using OmniX adapters with ComfyUI's Flux pipeline.
 
 ## Features
 
-✨ **Panorama Generation**
-- Text-to-360° panorama using Flux.1-dev + OmniX RGB adapter
-- High-resolution output (up to 4096×2048)
-- Seamless integration with ComfyUI's existing Flux workflow
-
-🔍 **Panorama Perception**
-- **Distance Maps**: Extract metric depth from panoramas
+🔍 **Panorama Perception** (Implemented)
+- **Distance Maps**: Extract metric depth from panoramas using Flux VAE + LoRA adapters
 - **Normal Maps**: Surface normal estimation for 3D reconstruction
-- **PBR Materials**: Albedo, roughness, and metallic maps
-- Multi-modal extraction in single pass
+- **Albedo Maps**: Base color/diffuse extraction
+- **PBR Materials**: Roughness and metallic maps
+- Multi-modal extraction using real OmniX architecture
+
+⚙️ **Architecture**
+- Uses Flux VAE for encoding/decoding (proper latent-space processing)
+- LoRA adapters injected into Flux transformer blocks
+- Based on real HKU-MMLab/OmniX implementation
 
 🛠️ **Utility Nodes**
 - Panorama aspect ratio validation and correction
@@ -128,95 +129,78 @@ ComfyUI/
 
 ## Quick Start
 
-### Basic Text-to-Panorama Workflow
-
-**Note:** OmniX works with **any Flux model loader** - use your preferred Flux variant (dev, schnell, fp8, etc.)!
-
-```
-1. [CheckpointLoaderSimple/UNETLoader/DiffusionModelLoader] → Load any Flux model
-   ↓
-2. [OmniXAdapterLoader] → Load OmniX adapters (preset: omnix-base, precision: fp16)
-   ↓
-3. [OmniXApplyAdapters] → Apply RGB generation adapter to model
-   ↓
-4. [CLIPTextEncode] → Encode your prompt
-   ↓
-5. [KSampler] → Generate (use 2:1 aspect ratio: 2048×1024)
-   ↓
-6. [VAEDecode] → Decode latents
-   ↓
-7. [SaveImage] → Save your 360° panorama
-```
-
-**Supported Flux Models:**
-- Flux.1-dev (standard)
-- Flux.1-schnell (faster)
-- Flux fp8 variants (lower VRAM)
-- Any Flux-based custom models
-- Use any ComfyUI model loader node that outputs a `MODEL` type
-
 ### Panorama Perception Workflow
 
+**Requirements:**
+- Flux.1-dev model and VAE
+- OmniX adapter weights downloaded to `ComfyUI/models/loras/omnix/`
+- Input panorama in 2:1 aspect ratio (equirectangular)
+
+**Basic Workflow:**
 ```
-1. [LoadImage] → Load a panorama image
+1. [VAELoader] → Load Flux VAE
    ↓
-2. [OmniXPanoramaValidator] → Validate/fix aspect ratio
+2. [LoadImage] → Load your panorama image
    ↓
-3. [OmniXAdapterLoader] → Load perception adapters
+3. [OmniXPanoramaValidator] → Validate/fix aspect ratio to 2:1
    ↓
-4. [OmniXPanoramaPerception] → Extract properties
-   ├─ Distance map
-   ├─ Normal map
-   ├─ Albedo
-   ├─ Roughness
-   └─ Metallic
+4. [OmniXAdapterLoader] → Load OmniX perception adapters (omnix-base, bf16)
+   ↓
+5. [OmniXPanoramaPerception] → Extract properties
+   ├─ vae: Connect Flux VAE
+   ├─ adapters: Connect adapter loader
+   ├─ panorama: Connect validated image
+   └─ Output: distance, normal, albedo, roughness, metallic maps
+   ↓
+6. [SaveImage] → Save extracted property maps
 ```
+
+**Important Notes:**
+- This implementation uses the real OmniX architecture (Flux VAE + LoRA adapters)
+- Perception works in latent space, not pixel space
+- Requires Flux.1-dev VAE for encoding/decoding
+- Generation nodes removed - this is perception-only
 
 ## Nodes Reference
 
 ### OmniXAdapterLoader
 
-Loads OmniX adapter weights for panorama processing.
+Loads OmniX perception adapter weights.
 
 **Inputs:**
-- `adapter_preset`: Model variant (`omnix-base`, `omnix-large`)
-- `precision`: Data type (`fp16`, `fp32`, `bf16`)
+- `adapter_preset`: Model variant (`omnix-base`)
+- `precision`: Data type (`bf16` recommended, `fp16`, `fp32`)
 
 **Outputs:**
-- `adapters`: Loaded OmniX adapters
+- `adapters`: Adapter manager with loaded LoRA weights
 
-### OmniXApplyAdapters
-
-Applies OmniX adapters to a Flux model for panorama generation.
-
-**Inputs:**
-- `model`: Flux MODEL from checkpoint loader
-- `adapters`: OmniX adapters from loader
-- `adapter_type`: Type of adapter (`rgb_generation`)
-- `adapter_strength`: Strength multiplier (0.0-2.0, default: 1.0)
-
-**Outputs:**
-- `model`: Modified MODEL ready for panorama generation
+**Description:**
+Loads perception adapter weights from `ComfyUI/models/loras/omnix/`. Adapters are loaded as LoRA weights that will be injected into Flux transformer blocks for perception tasks.
 
 ### OmniXPanoramaPerception
 
-Extracts geometric and material properties from panoramas.
+Extracts geometric and material properties from panoramas using Flux VAE + LoRA adapters.
 
 **Inputs:**
-- `adapters`: OmniX adapters
-- `panorama`: Input panorama IMAGE
+- `vae`: Flux VAE (required) - for encoding/decoding
+- `adapters`: OmniX adapter manager from OmniXAdapterLoader
+- `panorama`: Input panorama IMAGE (2:1 aspect ratio)
 - `extract_distance`: Enable depth extraction (boolean)
 - `extract_normal`: Enable normal extraction (boolean)
 - `extract_albedo`: Enable albedo extraction (boolean)
 - `extract_roughness`: Enable roughness extraction (boolean)
 - `extract_metallic`: Enable metallic extraction (boolean)
+- `num_steps`: Denoising steps (default: 28)
 
 **Outputs:**
-- `distance`: Depth map (visualized with colormap)
-- `normal`: Normal map (RGB visualization)
+- `distance`: Depth/distance map
+- `normal`: Surface normal map
 - `albedo`: Base color/diffuse map
-- `roughness`: Roughness map (grayscale)
-- `metallic`: Metallic map (grayscale)
+- `roughness`: Roughness map
+- `metallic`: Metallic map
+
+**Description:**
+Uses the real OmniX architecture: encodes panorama to latents with Flux VAE, applies task-specific LoRA adapters, and decodes back to images. This is the main perception node.
 
 ### OmniXPanoramaValidator
 
