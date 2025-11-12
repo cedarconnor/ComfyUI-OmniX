@@ -78,13 +78,13 @@ OmniX requires adapter weights in addition to the base Flux.1-dev model.
    ```bash
    pip install huggingface_hub[cli]
    huggingface-cli download KevinHuang/OmniX \
-       --local-dir ComfyUI/models/omnix/omnix-base
+       --local-dir ComfyUI/models/loras/omnix
    ```
 
    **Method C: Manual Download**
    - Visit: https://huggingface.co/KevinHuang/OmniX
-   - Download all `.safetensors` files and `config.json`
-   - Place in: `ComfyUI/models/omnix/omnix-base/`
+   - Download all `.safetensors` files from the repository
+   - Place in: `ComfyUI/models/loras/omnix/`
 
 3. **Restart ComfyUI**
 
@@ -95,22 +95,22 @@ OmniX requires adapter weights in addition to the base Flux.1-dev model.
 ```
 ComfyUI/
 ├── models/
-│   ├── checkpoints/
-│   │   └── flux1-dev.safetensors          # Base Flux model
-│   └── omnix/
-│       └── omnix-base/                     # OmniX adapters (~10GB)
-│           ├── config.json
-│           ├── rgb_adapter.safetensors
-│           ├── distance_adapter.safetensors
-│           ├── normal_adapter.safetensors
-│           ├── albedo_adapter.safetensors
-│           ├── roughness_adapter.safetensors
-│           └── metallic_adapter.safetensors
+│   ├── checkpoints/ (or diffusion_models/)
+│   │   └── flux1-dev.safetensors          # Base Flux model (~23GB)
+│   └── loras/
+│       └── omnix/                          # OmniX adapters (~3.5GB total)
+│           ├── text_to_pano_rgb.safetensors           (~224MB)
+│           ├── rgb_to_depth_depth.safetensors         (~224MB)
+│           ├── rgb_to_normal_normal.safetensors       (~224MB)
+│           ├── rgb_to_albedo_albedo.safetensors       (~224MB)
+│           ├── rgb_to_pbr_pbr.safetensors             (~224MB)
+│           └── rgb_to_semantic_semantic.safetensors   (~224MB)
+│           └── (plus additional variant files from HuggingFace)
 └── custom_nodes/
     └── ComfyUI-OmniX/                      # This repository
 ```
 
-**Note:** File names in the HuggingFace repo may differ. See [MODEL_DOWNLOAD_GUIDE.md](MODEL_DOWNLOAD_GUIDE.md) for the complete file mapping.
+**Note:** Files are downloaded directly from HuggingFace with their original names. The code automatically maps these to the correct adapter types. See [MODEL_DOWNLOAD_GUIDE.md](MODEL_DOWNLOAD_GUIDE.md) for complete file mappings.
 
 ### Model Size Requirements
 
@@ -247,8 +247,8 @@ Validates and corrects panorama aspect ratios.
 
 **Solution:** Ensure adapter weights are properly installed:
 ```bash
-ls ComfyUI/models/omnix/omnix-base/
-# Should show: rgb_generation_adapter.safetensors, distance_adapter.safetensors, etc.
+ls ComfyUI/models/loras/omnix/
+# Should show: text_to_pano_rgb.safetensors, rgb_to_depth_depth.safetensors, etc.
 ```
 
 ### "CUDA out of memory"

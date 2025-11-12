@@ -139,6 +139,16 @@ class AdapterManager:
         "semantic",
     ]
 
+    # Mapping from adapter types to actual filenames in the HuggingFace download
+    ADAPTER_FILENAMES = {
+        "rgb_generation": "text_to_pano_rgb.safetensors",
+        "distance": "rgb_to_depth_depth.safetensors",
+        "normal": "rgb_to_normal_normal.safetensors",
+        "albedo": "rgb_to_albedo_albedo.safetensors",
+        "pbr": "rgb_to_pbr_pbr.safetensors",
+        "semantic": "rgb_to_semantic_semantic.safetensors",
+    }
+
     def __init__(self, adapter_dir: str, dtype: torch.dtype = torch.float16):
         """
         Initialize adapter manager.
@@ -186,14 +196,21 @@ class AdapterManager:
             actual_adapter_type = "pbr"
             print(f"Note: {adapter_type} uses unified PBR adapter")
 
-        # Load from disk
-        adapter_path = self.adapter_dir / f"{actual_adapter_type}_adapter.safetensors"
+        # Get the actual filename from mapping
+        if actual_adapter_type not in self.ADAPTER_FILENAMES:
+            raise ValueError(
+                f"No filename mapping for adapter type: {actual_adapter_type}\n"
+                f"Available types: {', '.join(self.ADAPTER_FILENAMES.keys())}"
+            )
+
+        filename = self.ADAPTER_FILENAMES[actual_adapter_type]
+        adapter_path = self.adapter_dir / filename
 
         if not adapter_path.exists():
             raise FileNotFoundError(
                 f"Adapter weights not found: {adapter_path}\n"
-                f"Expected file: {actual_adapter_type}_adapter.safetensors\n"
-                f"Please run: python download_models.py"
+                f"Expected file: {filename}\n"
+                f"Please ensure OmniX model files are downloaded to: {self.adapter_dir}"
             )
 
         try:
@@ -248,9 +265,14 @@ class AdapterManager:
 
         adapters = []
         for adapter_type in self.ADAPTER_TYPES:
-            adapter_path = self.adapter_dir / f"{adapter_type}_adapter.safetensors"
-            if adapter_path.exists():
-                adapters.append(adapter_type)
+            if adapter_type in ["roughness", "metallic"]:
+                # Skip legacy types, they map to pbr
+                continue
+            if adapter_type in self.ADAPTER_FILENAMES:
+                filename = self.ADAPTER_FILENAMES[adapter_type]
+                adapter_path = self.adapter_dir / filename
+                if adapter_path.exists():
+                    adapters.append(adapter_type)
 
         return adapters
 

@@ -9,8 +9,8 @@ Repository: https://huggingface.co/KevinHuang/OmniX
 
 Usage:
     python download_models.py
-    python download_models.py --output_dir /path/to/ComfyUI/models/omnix/omnix-base
-    python download_models.py --adapters rgb distance normal
+    python download_models.py --output_dir /path/to/ComfyUI/models/loras/omnix
+    python download_models.py --list-only
 """
 
 import argparse
@@ -28,15 +28,15 @@ REPO_ID = "KevinHuang/OmniX"  # Update with actual repository when available
 # Alternative: Official OmniX repository (update when released)
 OFFICIAL_REPO = "HKU-MMLab/OmniX"
 
-# Adapter directory mapping (HuggingFace dir -> our adapter name)
-ADAPTER_DIR_MAP = {
-    "image_to_pano": "rgb_generation",
-    "rgb_to_depth": "distance",
-    "rgb_to_normal": "normal",
-    "rgb_to_albedo": "albedo",
-    "rgb_to_pbr": "pbr",  # Contains both roughness and metallic
-    "rgb_to_semantic": "semantic",
-}
+# Files to download from HuggingFace (keeping original names)
+ADAPTER_FILES = [
+    "text_to_pano_rgb.safetensors",
+    "rgb_to_depth_depth.safetensors",
+    "rgb_to_normal_normal.safetensors",
+    "rgb_to_albedo_albedo.safetensors",
+    "rgb_to_pbr_pbr.safetensors",
+    "rgb_to_semantic_semantic.safetensors",
+]
 
 # Alternative mapping for user-friendly names
 USER_FRIENDLY_NAMES = {
@@ -55,16 +55,19 @@ USER_FRIENDLY_NAMES = {
 }
 
 
-def download_adapter_directory(repo_id: str, adapter_dir: str, output_dir: Path):
+def download_adapters(repo_id: str, output_dir: Path, files_to_download=None):
     """
-    Download a specific adapter directory from HuggingFace.
+    Download adapter files from HuggingFace.
 
     Args:
         repo_id: HuggingFace repository ID
-        adapter_dir: Directory name in the repo (e.g., "image_to_pano")
         output_dir: Local output directory
+        files_to_download: List of specific files to download (optional)
     """
-    print(f"\n📦 Downloading {adapter_dir}...")
+    if files_to_download is None:
+        files_to_download = ADAPTER_FILES
+
+    print(f"\n📦 Downloading {len(files_to_download)} adapter file(s)...")
 
     try:
         # Try to check if repository exists first
@@ -76,51 +79,37 @@ def download_adapter_directory(repo_id: str, adapter_dir: str, output_dir: Path)
             print(f"  ℹ️  Check https://github.com/HKU-MMLab/OmniX for updates")
             return False
 
-        # Download the specific directory
-        local_path = snapshot_download(
+        # Download all files directly to output directory
+        print(f"  Downloading to: {output_dir}")
+
+        snapshot_download(
             repo_id=repo_id,
-            allow_patterns=f"{adapter_dir}/**",
-            local_dir=output_dir / adapter_dir,
-            local_dir_use_symlinks=False
+            local_dir=output_dir,
+            local_dir_use_symlinks=False,
+            allow_patterns=["*.safetensors"] if files_to_download == ADAPTER_FILES else files_to_download
         )
 
-        # Move files from subdirectory to output_dir with proper naming
-        adapter_name = ADAPTER_DIR_MAP.get(adapter_dir, adapter_dir)
-        source_dir = output_dir / adapter_dir / adapter_dir
+        # Verify downloaded files
+        downloaded_files = []
+        for filename in files_to_download:
+            file_path = output_dir / filename
+            if file_path.exists():
+                size_mb = file_path.stat().st_size / (1024 * 1024)
+                print(f"    ✓ {filename} ({size_mb:.1f} MB)")
+                downloaded_files.append(filename)
+            else:
+                print(f"    ⚠️  {filename} not found")
 
-        if source_dir.exists():
-            # List downloaded files
-            files = list(source_dir.glob("*"))
-            print(f"  Downloaded {len(files)} files:")
-
-            for file_path in files:
-                if file_path.is_file():
-                    # Rename to our convention: {adapter_name}_adapter.safetensors
-                    if file_path.suffix == ".safetensors":
-                        new_name = f"{adapter_name}_adapter.safetensors"
-                        target_path = output_dir / new_name
-                        shutil.copy2(file_path, target_path)
-                        print(f"    ✓ {file_path.name} → {new_name}")
-                    elif file_path.name == "config.json":
-                        # Keep config files with adapter prefix
-                        target_path = output_dir / f"{adapter_name}_config.json"
-                        shutil.copy2(file_path, target_path)
-                        print(f"    ✓ {file_path.name} → {target_path.name}")
-                    else:
-                        # Copy other files as-is
-                        target_path = output_dir / file_path.name
-                        shutil.copy2(file_path, target_path)
-                        print(f"    ✓ {file_path.name}")
-
-            # Clean up the temporary directory
-            shutil.rmtree(output_dir / adapter_dir)
-
-        print(f"  ✅ {adapter_dir} downloaded successfully")
-        return True
+        if downloaded_files:
+            print(f"  ✅ Downloaded {len(downloaded_files)}/{len(files_to_download)} files successfully")
+            return True
+        else:
+            print(f"  ❌ No files downloaded")
+            return False
 
     except Exception as e:
         error_msg = str(e)
-        print(f"  ❌ Failed to download {adapter_dir}: {error_msg}")
+        print(f"  ❌ Failed to download: {error_msg}")
 
         # Provide helpful error messages
         if "Repository Not Found" in error_msg or "404" in error_msg:
@@ -128,8 +117,7 @@ def download_adapter_directory(repo_id: str, adapter_dir: str, output_dir: Path)
             print(f"     - OmniX weights may not be publicly released yet")
             print(f"     - Check https://arxiv.org/abs/2510.26800 for paper")
             print(f"     - Check https://github.com/HKU-MMLab/OmniX for official release")
-            print(f"     - If you have access to weights, place them manually in:")
-            print(f"       {output_dir}/{adapter_name}_adapter.safetensors")
+            print(f"     - If you have access to weights, place them manually in: {output_dir}")
         elif "Unauthorized" in error_msg or "403" in error_msg:
             print(f"\n  ℹ️  Repository requires authentication:")
             print(f"     Run: huggingface-cli login")
@@ -142,53 +130,31 @@ def download_adapter_directory(repo_id: str, adapter_dir: str, output_dir: Path)
         return False
 
 
-def download_all_adapters(repo_id: str, output_dir: Path, specific_adapters=None):
+def download_all_adapters(repo_id: str, output_dir: Path):
     """
-    Download all or specific adapters.
+    Download all adapter files.
 
     Args:
         repo_id: HuggingFace repository ID
         output_dir: Local output directory
-        specific_adapters: List of specific adapters to download (optional)
     """
-    # Determine which adapters to download
-    if specific_adapters:
-        # Map user-friendly names to actual directory names
-        adapter_dirs = []
-        for adapter in specific_adapters:
-            adapter_lower = adapter.lower()
-            if adapter_lower in USER_FRIENDLY_NAMES:
-                dir_name = USER_FRIENDLY_NAMES[adapter_lower]
-                if dir_name not in adapter_dirs:
-                    adapter_dirs.append(dir_name)
-            elif adapter in ADAPTER_DIR_MAP:
-                adapter_dirs.append(adapter)
-            else:
-                print(f"⚠️  Warning: Unknown adapter '{adapter}', skipping")
-    else:
-        # Download all adapters
-        adapter_dirs = list(ADAPTER_DIR_MAP.keys())
-
-    if not adapter_dirs:
-        print("❌ No valid adapters specified!")
-        return
-
     print(f"\n{'='*60}")
-    print(f"Downloading {len(adapter_dirs)} adapter(s) from {repo_id}")
+    print(f"Downloading OmniX adapters from {repo_id}")
     print(f"Output directory: {output_dir}")
     print(f"{'='*60}")
 
-    # Download each adapter
-    success_count = 0
-    for adapter_dir in adapter_dirs:
-        if download_adapter_directory(repo_id, adapter_dir, output_dir):
-            success_count += 1
+    # Download all adapter files
+    success = download_adapters(repo_id, output_dir)
 
-    print(f"\n{'='*60}")
-    print(f"✅ Download complete!")
-    print(f"   Successfully downloaded: {success_count}/{len(adapter_dirs)} adapters")
-    print(f"   Location: {output_dir}")
-    print(f"{'='*60}")
+    if success:
+        print(f"\n{'='*60}")
+        print(f"✅ Download complete!")
+        print(f"   Location: {output_dir}")
+        print(f"{'='*60}")
+    else:
+        print(f"\n{'='*60}")
+        print(f"❌ Download failed!")
+        print(f"{'='*60}")
 
 
 def main():
@@ -197,22 +163,22 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Download all adapters
+  # Download all adapters to default location
   python download_models.py
 
-  # Download specific adapters
-  python download_models.py --adapters rgb depth normal albedo
-
   # Download to custom location
-  python download_models.py --output_dir /path/to/ComfyUI/models/omnix/omnix-base
+  python download_models.py --output_dir /path/to/ComfyUI/models/loras/omnix
 
-Available adapters:
-  rgb, generation          - Text/image to panorama generation
-  depth, distance          - Depth/distance prediction
-  normal                   - Normal map estimation
-  albedo                   - Albedo/base color extraction
-  pbr, roughness, metallic - PBR material properties
-  semantic, segmentation   - Semantic segmentation
+  # List available files
+  python download_models.py --list-only
+
+Files downloaded (keeping original HuggingFace names):
+  text_to_pano_rgb.safetensors           - Text/image to panorama generation
+  rgb_to_depth_depth.safetensors         - Depth/distance prediction
+  rgb_to_normal_normal.safetensors       - Normal map estimation
+  rgb_to_albedo_albedo.safetensors       - Albedo/base color extraction
+  rgb_to_pbr_pbr.safetensors             - PBR material properties
+  rgb_to_semantic_semantic.safetensors   - Semantic segmentation
 """
     )
 
@@ -220,36 +186,33 @@ Available adapters:
         "--output_dir",
         type=str,
         default=None,
-        help="Output directory (default: ./models/omnix/omnix-base)"
+        help="Output directory (default: ./models/loras/omnix)"
     )
 
     parser.add_argument(
-        "--adapters",
-        nargs="+",
-        default=None,
-        help="Specific adapters to download (default: all)"
-    )
-
-    parser.add_argument(
-        "--list",
+        "--list-only",
         action="store_true",
-        help="List available adapters and exit"
+        help="List available files and exit"
     )
 
     args = parser.parse_args()
 
-    # List adapters
-    if args.list:
-        print("\n📋 Available Adapters:\n")
-        print(f"{'Adapter Name':<20} {'HF Directory':<25} {'Purpose'}")
-        print("-" * 70)
-        print(f"{'rgb_generation':<20} {'image_to_pano':<25} Panorama generation")
-        print(f"{'distance':<20} {'rgb_to_depth':<25} Depth prediction")
-        print(f"{'normal':<20} {'rgb_to_normal':<25} Normal estimation")
-        print(f"{'albedo':<20} {'rgb_to_albedo':<25} Albedo extraction")
-        print(f"{'pbr':<20} {'rgb_to_pbr':<25} Roughness & metallic")
-        print(f"{'semantic':<20} {'rgb_to_semantic':<25} Segmentation")
-        print("\nAliases: rgb/generation, depth/distance, pbr/roughness/metallic, semantic/segmentation\n")
+    # List files
+    if args.list_only:
+        print("\n📋 OmniX Adapter Files (keeping HuggingFace names):\n")
+        print(f"{'Filename':<40} {'Purpose'}")
+        print("-" * 80)
+        for filename in ADAPTER_FILES:
+            purpose = {
+                "text_to_pano_rgb.safetensors": "Panorama generation",
+                "rgb_to_depth_depth.safetensors": "Depth prediction",
+                "rgb_to_normal_normal.safetensors": "Normal estimation",
+                "rgb_to_albedo_albedo.safetensors": "Albedo extraction",
+                "rgb_to_pbr_pbr.safetensors": "Roughness & metallic (PBR)",
+                "rgb_to_semantic_semantic.safetensors": "Semantic segmentation",
+            }.get(filename, "Unknown")
+            print(f"{filename:<40} {purpose}")
+        print(f"\nTotal: {len(ADAPTER_FILES)} files (~{len(ADAPTER_FILES) * 224} MB)\n")
         return
 
     # Determine output directory
@@ -258,9 +221,9 @@ Available adapters:
     else:
         # Try to find ComfyUI directory
         possible_paths = [
-            Path.home() / "ComfyUI" / "models" / "omnix" / "omnix-base",
-            Path("ComfyUI") / "models" / "omnix" / "omnix-base",
-            Path("models") / "omnix" / "omnix-base",
+            Path.home() / "ComfyUI" / "models" / "loras" / "omnix",
+            Path("ComfyUI") / "models" / "loras" / "omnix",
+            Path("models") / "loras" / "omnix",
         ]
 
         output_dir = None
@@ -270,14 +233,14 @@ Available adapters:
                 break
 
         if output_dir is None:
-            output_dir = Path("models") / "omnix" / "omnix-base"
+            output_dir = Path("models") / "loras" / "omnix"
 
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Download adapters
     try:
-        download_all_adapters(REPO_ID, output_dir, args.adapters)
+        download_all_adapters(REPO_ID, output_dir)
 
         print("\n📝 Next steps:")
         print("1. Verify files in:", output_dir)

@@ -9,6 +9,7 @@ import torch
 import folder_paths
 from typing import Tuple, Dict, Any, Optional
 import os
+import comfy.samplers
 
 from .omnix.adapters import AdapterManager, OmniXAdapters
 from .omnix.perceiver import OmniXPerceiver
@@ -21,75 +22,6 @@ from .omnix.utils import (
     visualize_depth_map,
     normalize_normal_map
 )
-
-
-class OmniXModelLoader:
-    """
-    Loads and initializes OmniX models for ComfyUI.
-    This prepares the Flux base model for OmniX adapter injection.
-    """
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "model": ("MODEL",),
-                "model_preset": (["omnix-base", "omnix-large"], {"default": "omnix-base"}),
-                "precision": (["fp32", "fp16", "bf16"], {"default": "fp16"}),
-            }
-        }
-
-    RETURN_TYPES = ("MODEL", "OMNIX_MODEL_LOADER")
-    RETURN_NAMES = ("model", "loader")
-    FUNCTION = "load_model"
-    CATEGORY = "OmniX"
-    DESCRIPTION = "Initialize OmniX model loader and prepare Flux model"
-
-    def load_model(
-        self,
-        model: Any,
-        model_preset: str,
-        precision: str
-    ) -> Tuple[Any, ModelLoader]:
-        """Load and initialize OmniX model"""
-        try:
-            # Determine dtype
-            dtype_map = {
-                "fp32": torch.float32,
-                "fp16": torch.float16,
-                "bf16": torch.bfloat16
-            }
-            dtype = dtype_map.get(precision, torch.float16)
-
-            # Find model path
-            model_base_path = folder_paths.get_folder_paths("omnix")
-            if not model_base_path:
-                model_base_path = [os.path.join(
-                    os.path.dirname(__file__),
-                    "models",
-                    "omnix"
-                )]
-
-            model_path = os.path.join(model_base_path[0], model_preset)
-
-            # Initialize loader
-            loader = ModelLoader(
-                model_path=model_path,
-                dtype=dtype
-            )
-
-            # Prepare Flux model for OmniX
-            model = loader.load_flux_model(model)
-
-            print(f"✓ Initialized OmniX model: {model_preset} ({precision})")
-
-            return (model, loader)
-
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to initialize OmniX model '{model_preset}': {str(e)}\n"
-                f"Please ensure model files are installed."
-            )
 
 
 class OmniXPanoramaGenerator:
@@ -209,17 +141,21 @@ class OmniXAdapterLoader:
             }
             dtype = dtype_map.get(precision, torch.float16)
 
-            # Find adapter path
-            adapter_base_path = folder_paths.get_folder_paths("omnix")
-            if not adapter_base_path:
-                # Fallback to custom_nodes directory
-                adapter_base_path = [os.path.join(
-                    os.path.dirname(__file__),
-                    "models",
-                    "omnix"
-                )]
-
-            adapter_path = os.path.join(adapter_base_path[0], adapter_preset)
+            # Find adapter path - check loras/omnix directory first
+            loras_path = folder_paths.get_folder_paths("loras")
+            if loras_path:
+                # Files are directly in loras/omnix
+                adapter_path = os.path.join(loras_path[0], "omnix")
+            else:
+                # Fallback to checking omnix directory with preset subdirectories
+                adapter_base_path = folder_paths.get_folder_paths("omnix")
+                if not adapter_base_path:
+                    adapter_base_path = [os.path.join(
+                        os.path.dirname(__file__),
+                        "models",
+                        "omnix"
+                    )]
+                adapter_path = os.path.join(adapter_base_path[0], adapter_preset)
 
             # Load adapters
             adapter_manager = AdapterManager(adapter_path, dtype=dtype)
@@ -555,17 +491,21 @@ class OmniXModelLoaderNode:
             print(f"Loading Flux checkpoint: {flux_checkpoint}")
             model, clip, vae = load_flux_model(flux_checkpoint)
 
-            # Find adapter path
-            adapter_base_path = folder_paths.get_folder_paths("omnix")
-            if not adapter_base_path:
-                # Fallback to custom_nodes directory
-                adapter_base_path = [os.path.join(
-                    os.path.dirname(__file__),
-                    "models",
-                    "omnix"
-                )]
-
-            adapter_path = os.path.join(adapter_base_path[0], adapter_preset)
+            # Find adapter path - check loras/omnix directory first
+            loras_path = folder_paths.get_folder_paths("loras")
+            if loras_path:
+                # Files are directly in loras/omnix
+                adapter_path = os.path.join(loras_path[0], "omnix")
+            else:
+                # Fallback to checking omnix directory with preset subdirectories
+                adapter_base_path = folder_paths.get_folder_paths("omnix")
+                if not adapter_base_path:
+                    adapter_base_path = [os.path.join(
+                        os.path.dirname(__file__),
+                        "models",
+                        "omnix"
+                    )]
+                adapter_path = os.path.join(adapter_base_path[0], adapter_preset)
 
             # Create OmniX model loader
             omnix_model = ModelLoader.from_comfyui(

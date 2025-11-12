@@ -12,7 +12,6 @@ from typing import Optional, Dict, Any, List, Tuple
 import numpy as np
 
 from .model_loader import OmniXModelLoader
-from .utils import to_comfyui_image, from_comfyui_image
 
 # Import ComfyUI's sampling utilities
 import comfy.sample
@@ -138,8 +137,11 @@ class OmniXPanoramaGenerator:
         if conditioning_image is not None:
             print(f"  Using image conditioning (strength: {conditioning_strength:.2f})")
 
-            # Encode image to latent
-            conditioning_image = from_comfyui_image(conditioning_image)
+            # conditioning_image is already a tensor in ComfyUI format (B, H, W, C)
+            # Convert to (B, C, H, W) for processing
+            if conditioning_image.ndim == 4 and conditioning_image.shape[-1] == 3:
+                conditioning_image = conditioning_image.permute(0, 3, 1, 2)
+
             conditioning_image = conditioning_image.to(device)
 
             # Resize to match target size
@@ -186,8 +188,12 @@ class OmniXPanoramaGenerator:
         with torch.no_grad():
             decoded = self.vae.decode(samples)
 
-        # Convert to ComfyUI format
-        output = to_comfyui_image(decoded)
+        # decoded is already a tensor in (B, C, H, W) format
+        # Convert to ComfyUI format (B, H, W, C)
+        if decoded.ndim == 4 and decoded.shape[1] == 3:
+            output = decoded.permute(0, 2, 3, 1)
+        else:
+            output = decoded
 
         print(f"✓ Generated panorama: {output.shape}")
 

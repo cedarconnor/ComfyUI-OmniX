@@ -103,8 +103,9 @@ class PanoramaEncoder(nn.Module):
         if panorama.shape[-1] == 3:  # ComfyUI format (B, H, W, C)
             panorama = panorama.permute(0, 3, 1, 2)
 
-        # Convert to correct dtype
-        panorama = panorama.to(dtype=self.dtype)
+        # Move to correct device and dtype
+        device = self.conv_in.weight.device
+        panorama = panorama.to(device=device, dtype=self.dtype)
 
         # Normalize input to [-1, 1] range
         panorama = panorama * 2.0 - 1.0

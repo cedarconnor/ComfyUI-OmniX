@@ -27,7 +27,7 @@ OmniX consists of two main components:
 
 **Total Size:** ~10-12GB (all adapters)
 
-**Target Location:** `ComfyUI/models/omnix/omnix-base/`
+**Target Location:** `ComfyUI/models/loras/omnix/`
 
 ---
 
@@ -42,7 +42,7 @@ We provide a Python script that automatically downloads and organizes all requir
 python download_models.py
 
 # Or specify custom output directory
-python download_models.py --output_dir /path/to/ComfyUI/models/omnix/omnix-base
+python download_models.py --output_dir /path/to/ComfyUI/models/loras/omnix
 
 # List available files first
 python download_models.py --list-only
@@ -61,7 +61,7 @@ pip install huggingface_hub[cli]
 
 # Download all files
 huggingface-cli download KevinHuang/OmniX \
-    --local-dir ComfyUI/models/omnix/omnix-base \
+    --local-dir ComfyUI/models/loras/omnix \
     --local-dir-use-symlinks False
 ```
 
@@ -69,10 +69,9 @@ huggingface-cli download KevinHuang/OmniX \
 
 1. Visit: https://huggingface.co/KevinHuang/OmniX
 2. Click "Files and versions" tab
-3. Download the following files:
-   - `config.json`
-   - All `.safetensors` files (adapters)
-4. Place in: `ComfyUI/models/omnix/omnix-base/`
+3. Download all `.safetensors` files (adapters)
+   - Keep their original filenames (e.g., `text_to_pano_rgb.safetensors`)
+4. Place in: `ComfyUI/models/loras/omnix/`
 
 ---
 
@@ -83,17 +82,17 @@ After downloading, your directory should look like this:
 ```
 ComfyUI/
 ├── models/
-│   ├── checkpoints/
-│   │   └── flux1-dev.safetensors          # Flux base model (if using checkpoints)
-│   ├── omnix/
-│   │   └── omnix-base/                     # OmniX adapters
-│   │       ├── config.json                 # Configuration file
-│   │       ├── rgb_adapter.safetensors     # For panorama generation (~2GB)
-│   │       ├── distance_adapter.safetensors # For depth maps (~1.5GB)
-│   │       ├── normal_adapter.safetensors  # For normals (~1.5GB)
-│   │       ├── albedo_adapter.safetensors  # For albedo (~1.5GB)
-│   │       ├── roughness_adapter.safetensors # For roughness (~1GB)
-│   │       └── metallic_adapter.safetensors # For metallic (~1GB)
+│   ├── checkpoints/ (or diffusion_models/)
+│   │   └── flux1-dev.safetensors          # Flux base model (~23GB)
+│   ├── loras/
+│   │   └── omnix/                          # OmniX adapters
+│   │       ├── text_to_pano_rgb.safetensors           (~224MB)
+│   │       ├── rgb_to_depth_depth.safetensors         (~224MB)
+│   │       ├── rgb_to_normal_normal.safetensors       (~224MB)
+│   │       ├── rgb_to_albedo_albedo.safetensors       (~224MB)
+│   │       ├── rgb_to_pbr_pbr.safetensors             (~224MB)
+│   │       └── rgb_to_semantic_semantic.safetensors   (~224MB)
+│   │       └── (plus additional variant files)
 │   └── ...
 └── custom_nodes/
     └── ComfyUI-OmniX/                      # This repository
@@ -103,38 +102,33 @@ ComfyUI/
 
 ## File Naming Reference
 
-**IMPORTANT:** OmniX adapters are organized in **separate directories** on HuggingFace. Our download script automatically handles the organization and renaming.
+**IMPORTANT:** ComfyUI-OmniX now uses the **original HuggingFace filenames** directly. No renaming is required!
 
-### HuggingFace Repository Structure
+### HuggingFace Files to Adapter Type Mapping
 
-| HuggingFace Directory | Our Adapter Name | Purpose | Approx Size |
-|----------------------|------------------|---------|-------------|
-| `image_to_pano/` | `rgb_generation_adapter.safetensors` | Text/image → panorama | ~2GB |
-| `rgb_to_depth/` | `distance_adapter.safetensors` | Depth prediction | ~1.5GB |
-| `rgb_to_normal/` | `normal_adapter.safetensors` | Normal mapping | ~1.5GB |
-| `rgb_to_albedo/` | `albedo_adapter.safetensors` | Albedo extraction | ~1.5GB |
-| `rgb_to_pbr/` | `pbr_adapter.safetensors` | Roughness & metallic | ~2GB |
-| `rgb_to_semantic/` | `semantic_adapter.safetensors` | Segmentation | ~1.5GB |
+The code automatically maps HuggingFace filenames to adapter types:
 
-**Note:** The `rgb_to_pbr` directory contains a unified adapter for both roughness and metallic properties.
+| HuggingFace Filename | Adapter Type | Purpose | Size |
+|---------------------|--------------|---------|------|
+| `text_to_pano_rgb.safetensors` | `rgb_generation` | Text/image → panorama | ~224MB |
+| `rgb_to_depth_depth.safetensors` | `distance` | Depth prediction | ~224MB |
+| `rgb_to_normal_normal.safetensors` | `normal` | Normal mapping | ~224MB |
+| `rgb_to_albedo_albedo.safetensors` | `albedo` | Albedo extraction | ~224MB |
+| `rgb_to_pbr_pbr.safetensors` | `pbr` | Roughness & metallic | ~224MB |
+| `rgb_to_semantic_semantic.safetensors` | `semantic` | Semantic segmentation | ~224MB |
 
-### Manual Download & Renaming
+**Additional files in the repository** (e.g., `*_rgb.safetensors`, `*_camray.safetensors`) are variants and intermediate outputs that are not currently used by the ComfyUI integration. You can download them for completeness, but they are optional.
 
-If downloading manually from https://huggingface.co/KevinHuang/OmniX/tree/main:
+### Manual Download Instructions
+
+Simply download the files from https://huggingface.co/KevinHuang/OmniX and keep their original names:
 
 ```bash
-cd ComfyUI/models/omnix/omnix-base/
-
-# Download each directory and extract the .safetensors file, then rename:
-# From image_to_pano/*.safetensors → rgb_generation_adapter.safetensors
-# From rgb_to_depth/*.safetensors → distance_adapter.safetensors
-# From rgb_to_normal/*.safetensors → normal_adapter.safetensors
-# From rgb_to_albedo/*.safetensors → albedo_adapter.safetensors
-# From rgb_to_pbr/*.safetensors → pbr_adapter.safetensors
-# From rgb_to_semantic/*.safetensors → semantic_adapter.safetensors
+# No renaming needed! Just place files in the correct directory:
+# ComfyUI/models/loras/omnix/text_to_pano_rgb.safetensors
+# ComfyUI/models/loras/omnix/rgb_to_depth_depth.safetensors
+# etc.
 ```
-
-**Recommended:** Use the automated `download_models.py` script which handles all renaming automatically!
 
 ---
 
@@ -142,7 +136,7 @@ cd ComfyUI/models/omnix/omnix-base/
 
 ### Generation Adapters
 
-**RGB Generation Adapter** (`rgb_adapter.safetensors`)
+**RGB Generation Adapter** (`text_to_pano_rgb.safetensors`)
 - **Purpose**: Generates 360° panoramic images
 - **Input**: Text prompt or image + text
 - **Output**: Equirectangular panorama (2:1 aspect ratio)
@@ -150,30 +144,26 @@ cd ComfyUI/models/omnix/omnix-base/
 
 ### Perception Adapters
 
-**Distance Adapter** (`distance_adapter.safetensors`)
+**Distance Adapter** (`rgb_to_depth_depth.safetensors`)
 - **Purpose**: Predicts metric depth from panoramas
 - **Output**: Distance/depth map
 - **Use case**: 3D reconstruction, scene understanding
 
-**Normal Adapter** (`normal_adapter.safetensors`)
+**Normal Adapter** (`rgb_to_normal_normal.safetensors`)
 - **Purpose**: Estimates surface normals
 - **Output**: Normal map (XYZ vectors)
 - **Use case**: Relighting, bump mapping, 3D reconstruction
 
-**Albedo Adapter** (`albedo_adapter.safetensors`)
+**Albedo Adapter** (`rgb_to_albedo_albedo.safetensors`)
 - **Purpose**: Extracts base color (diffuse texture)
 - **Output**: Albedo map (RGB)
 - **Use case**: PBR materials, texture extraction
 
-**Roughness Adapter** (`roughness_adapter.safetensors`)
-- **Purpose**: Estimates surface roughness
-- **Output**: Roughness map (grayscale)
+**PBR Adapter** (`rgb_to_pbr_pbr.safetensors`)
+- **Purpose**: Estimates surface roughness and metallic properties
+- **Output**: Combined roughness + metallic maps
 - **Use case**: PBR materials, realistic rendering
-
-**Metallic Adapter** (`metallic_adapter.safetensors`)
-- **Purpose**: Estimates metallic properties
-- **Output**: Metallic map (grayscale)
-- **Use case**: PBR materials, realistic rendering
+- **Note**: This single adapter handles both roughness and metallic extraction
 
 ---
 
@@ -183,23 +173,23 @@ After installation, verify the setup:
 
 ```bash
 # Check directory structure
-ls -lh ComfyUI/models/omnix/omnix-base/
+ls -lh ComfyUI/models/loras/omnix/
 
 # Should show:
-# config.json
-# rgb_adapter.safetensors
-# distance_adapter.safetensors
-# normal_adapter.safetensors
-# albedo_adapter.safetensors
-# roughness_adapter.safetensors
-# metallic_adapter.safetensors
+# text_to_pano_rgb.safetensors
+# rgb_to_depth_depth.safetensors
+# rgb_to_normal_normal.safetensors
+# rgb_to_albedo_albedo.safetensors
+# rgb_to_pbr_pbr.safetensors
+# rgb_to_semantic_semantic.safetensors
+# (plus additional variant files)
 ```
 
 **In ComfyUI:**
 1. Restart ComfyUI
 2. Add "OmniXAdapterLoader" node
 3. Check if it loads without errors
-4. Console should show: "✓ Loaded OmniX adapters: omnix-base (fp16)"
+4. Console should show: "✓ Loaded OmniX adapters: omnix-base (fp16)" and the adapter path
 
 ---
 
@@ -210,7 +200,7 @@ ls -lh ComfyUI/models/omnix/omnix-base/
 **Solution:** Check the path
 ```bash
 # Create directory if missing
-mkdir -p ComfyUI/models/omnix/omnix-base/
+mkdir -p ComfyUI/models/loras/omnix/
 
 # Verify ComfyUI can find it
 # In ComfyUI, check: Settings → System → Folder Paths
@@ -218,10 +208,10 @@ mkdir -p ComfyUI/models/omnix/omnix-base/
 
 ### "Adapter weights not found: [filename]"
 
-**Solution:** Verify file names match exactly
-- Expected: `rgb_adapter.safetensors`
-- Not: `rgb.safetensors` or `omnix_rgb.safetensors`
-- Rename files to match expected names
+**Solution:** Verify file names match the HuggingFace originals
+- Expected: `text_to_pano_rgb.safetensors`, `rgb_to_depth_depth.safetensors`, etc.
+- Keep the original HuggingFace filenames - no renaming needed!
+- Make sure files are in `ComfyUI/models/loras/omnix/`
 
 ### "403 Forbidden" when downloading
 
@@ -249,16 +239,17 @@ huggingface-cli download KevinHuang/OmniX rgb_adapter.safetensors
 
 ## Optional: Omnix-Large Variant
 
-If a larger variant becomes available:
+If a larger variant becomes available, you could organize it in a separate subdirectory:
 
 ```
-ComfyUI/models/omnix/omnix-large/
-├── config.json
-├── rgb_adapter.safetensors
-└── ... (larger adapter files)
+ComfyUI/models/loras/
+├── omnix/              # Base variant (current)
+│   └── *.safetensors
+└── omnix-large/        # Large variant (if available)
+    └── *.safetensors
 ```
 
-Select in OmniXAdapterLoader node: `omnix-large`
+**Note:** Currently only the base variant is available from the HuggingFace repository.
 
 ---
 
@@ -266,13 +257,14 @@ Select in OmniXAdapterLoader node: `omnix-large`
 
 **Minimum (Generation only):**
 - Flux.1-dev: 23GB
-- RGB adapter: 2GB
-- **Total: ~25GB**
+- RGB adapter: 224MB
+- **Total: ~23.2GB**
 
 **Recommended (All features):**
 - Flux.1-dev: 23GB
-- All OmniX adapters: 10GB
-- **Total: ~33GB**
+- All core OmniX adapters: ~1.5GB (6 files × 224MB each)
+- All files from HuggingFace: ~3.5GB (includes variants)
+- **Total: ~26.5GB**
 
 **Plan ahead:** Ensure you have sufficient disk space before downloading.
 

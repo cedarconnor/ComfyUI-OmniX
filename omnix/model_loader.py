@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 from typing import Optional, Dict, Any, Tuple
 from pathlib import Path
+import os
 import folder_paths
 import comfy.model_management as mm
 import comfy.sd
@@ -215,18 +216,22 @@ def load_omnix_model(
     # Load Flux model
     model, clip, vae = load_flux_model(flux_checkpoint)
 
-    # Find adapter path
-    adapter_base_path = folder_paths.get_folder_paths("omnix")
-    if not adapter_base_path:
-        # Fallback to custom_nodes directory
-        import os
-        adapter_base_path = [os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "models",
-            "omnix"
-        )]
-
-    adapter_path = os.path.join(adapter_base_path[0], adapter_preset)
+    # Find adapter path - check loras/omnix directory first
+    loras_path = folder_paths.get_folder_paths("loras")
+    if loras_path:
+        # Files are directly in loras/omnix
+        adapter_path = os.path.join(loras_path[0], "omnix")
+    else:
+        # Fallback to checking omnix directory with preset subdirectories
+        adapter_base_path = folder_paths.get_folder_paths("omnix")
+        if not adapter_base_path:
+            import os
+            adapter_base_path = [os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                "models",
+                "omnix"
+            )]
+        adapter_path = os.path.join(adapter_base_path[0], adapter_preset)
 
     # Create OmniX loader
     omnix_loader = OmniXModelLoader.from_comfyui(
