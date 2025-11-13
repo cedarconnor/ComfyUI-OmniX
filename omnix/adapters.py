@@ -8,6 +8,7 @@ OmniX uses task-specific LoRA adapters that modify Flux's attention layers to
 specialize the model for different perception tasks (depth, normal, albedo, PBR).
 """
 
+import logging
 import torch
 import torch.nn as nn
 from pathlib import Path
@@ -15,6 +16,8 @@ from typing import Dict, Optional, List, Any, Union
 import safetensors.torch
 import os
 import gc
+
+logger = logging.getLogger(__name__)
 try:
     from .cross_lora import inject_cross_lora_into_model, set_active_adapters, remove_cross_lora_from_model
 except ModuleNotFoundError:  # pragma: no cover - allows running unit tests without ComfyUI
@@ -115,7 +118,7 @@ class AdapterManager:
         self.injected_model = None
         self.injected_adapters: List[str] = []
 
-        print(f"Initialized AdapterManager: {self.adapter_dir}")
+        logger.info(f"Initialized AdapterManager: {self.adapter_dir}")
 
     def load_adapter(self, adapter_type: str) -> Dict[str, torch.Tensor]:
         """
@@ -154,7 +157,7 @@ class AdapterManager:
             )
 
         # Load weights
-        print(f"Loading {adapter_type} adapter from {adapter_path}")
+        logger.info(f"Loading {adapter_type} adapter from {adapter_path}")
         state_dict = safetensors.torch.load_file(str(adapter_path))
 
         # Convert to target dtype and device
@@ -164,7 +167,7 @@ class AdapterManager:
         # Cache the weights
         self.adapter_weights[adapter_type] = state_dict
 
-        print(f"✓ Loaded {adapter_type} adapter: {len(state_dict)} weights")
+        logger.info(f"Loaded {adapter_type} adapter: {len(state_dict)} weights")
 
         return state_dict
 
@@ -191,18 +194,18 @@ class AdapterManager:
         if (self.injected_model is flux_model and
             set(self.injected_adapters) == set(adapter_types) and
             not force_reload):
-            print(f"[AdapterManager] Adapters already injected, skipping")
+            logger.debug("Adapters already injected, skipping")
             return flux_model
 
         # Remove existing adapters if any
         if self.injected_model is not None:
-            print(f"[AdapterManager] Removing previous adapters")
+            logger.info("Removing previous adapters")
             remove_cross_lora_from_model(self.injected_model)
             self.injected_model = None
             self.injected_adapters = []
 
         # Load all requested adapters
-        print(f"[AdapterManager] Loading adapters: {adapter_types}")
+        logger.info(f"Loading adapters: {adapter_types}")
         adapter_weights_dict = {}
         adapter_configs_dict = {}
 
@@ -219,7 +222,7 @@ class AdapterManager:
                 adapter_configs_dict[adapter_type] = ADAPTER_CONFIGS["distance"]
 
         # Inject into model
-        print(f"[AdapterManager] Injecting adapters into Flux model")
+        logger.info("Injecting adapters into Flux model")
         inject_cross_lora_into_model(
             flux_model,
             adapter_configs_dict,
@@ -231,7 +234,7 @@ class AdapterManager:
         self.injected_model = flux_model
         self.injected_adapters = adapter_types
 
-        print(f"✓ Injected {len(adapter_types)} adapters into Flux model")
+        logger.info(f"Injected {len(adapter_types)} adapters into Flux model")
 
         return flux_model
 
@@ -268,7 +271,7 @@ class AdapterManager:
             remove_cross_lora_from_model(flux_model)
             self.injected_model = None
             self.injected_adapters = []
-            print(f"[AdapterManager] Removed all adapters")
+            logger.info("Removed all adapters")
 
         return flux_model
 

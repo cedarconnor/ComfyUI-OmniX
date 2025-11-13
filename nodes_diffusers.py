@@ -21,6 +21,8 @@ from diffusers.utils.torch_utils import randn_tensor
 from diffusers.pipelines.flux.pipeline_flux import calculate_shift
 from safetensors.torch import load_file
 
+logger = logging.getLogger(__name__)
+
 
 class FluxDiffusersLoader:
     """
@@ -91,6 +93,12 @@ class FluxDiffusersLoader:
 
     @staticmethod
     def _load_single_file(path: Path, torch_dtype: torch.dtype) -> FluxPipeline:
+        """
+        Load Flux pipeline from single file with fallback for weights_only restriction.
+
+        First attempts standard loading. If that fails due to weights_only restriction,
+        temporarily overrides torch.load in a controlled manner.
+        """
         try:
             return FluxPipeline.from_single_file(path, torch_dtype=torch_dtype)
         except Exception as err:
@@ -98,22 +106,28 @@ class FluxDiffusersLoader:
                 raise
 
             logging.warning(
-                "Diffusers refused to load %s with weights_only restriction; retrying with safe override.",
-                path,
+                "Diffusers requires weights_only=False for %s. Using controlled override.",
+                path.name,
             )
-            import torch.serialization
 
-            original_load = torch.load
+            # Use a more controlled approach with context-like handling
+            import threading
+            lock = threading.Lock()
 
-            def patched_load(*args, **kwargs):
-                kwargs["weights_only"] = False
-                return original_load(*args, **kwargs)
+            with lock:
+                original_load = torch.load
 
-            torch.load = patched_load
-            try:
-                return FluxPipeline.from_single_file(path, torch_dtype=torch_dtype)
-            finally:
-                torch.load = original_load
+                def patched_load(*args, **kwargs):
+                    # Only override weights_only, preserve other kwargs
+                    kwargs["weights_only"] = False
+                    return original_load(*args, **kwargs)
+
+                try:
+                    torch.load = patched_load
+                    return FluxPipeline.from_single_file(path, torch_dtype=torch_dtype)
+                finally:
+                    # Always restore original torch.load
+                    torch.load = original_load
 
     def load_pipeline(
         self,
@@ -132,15 +146,15 @@ class FluxDiffusersLoader:
 
         if load_method == "local_file":
             checkpoint = self._find_checkpoint(local_checkpoint)
-            print(f"[FluxDiffusers] Loading Flux from {checkpoint}")
+            logger.info(f"Loading Flux from {checkpoint}")
             pipeline = self._load_single_file(checkpoint, dtype)
         else:
-            print(f"[FluxDiffusers] Downloading Flux model: {model_id}")
+            logger.info(f"Downloading Flux model: {model_id}")
             pipeline = FluxPipeline.from_pretrained(model_id, torch_dtype=dtype)
 
         pipeline = pipeline.to(device)
         pipeline.vae.enable_tiling()
-        print(f"[FluxDiffusers] Pipeline ready on {device}")
+        logger.info(f"Pipeline ready on {device}")
         return (pipeline, pipeline.vae, pipeline.text_encoder)
 
 
@@ -158,10 +172,21 @@ class OmniXLoRALoader:
 
     @classmethod
     def INPUT_TYPES(cls):
+        import os
+
+        # Auto-detect adapter directory
+        default_adapter_dir = "models/loras/omnix"
+
+        # Try to find ComfyUI loras directory
+        loras_paths = folder_paths.get_folder_paths("loras")
+        if loras_paths and len(loras_paths) > 0:
+            # Use first loras path + omnix subdirectory
+            default_adapter_dir = os.path.join(loras_paths[0], "omnix")
+
         return {
             "required": {
                 "flux_pipeline": ("FLUX_PIPELINE",),
-                "adapter_dir": ("STRING", {"default": "C:/ComfyUI/models/loras/omnix"}),
+                "adapter_dir": ("STRING", {"default": default_adapter_dir}),
                 "enable_distance": ("BOOLEAN", {"default": True}),
                 "enable_normal": ("BOOLEAN", {"default": True}),
                 "enable_albedo": ("BOOLEAN", {"default": True}),
@@ -205,7 +230,7 @@ class OmniXLoRALoader:
             requested.append("pbr")
 
         if not requested:
-            print("[OmniXLoRA] Warning: no adapters selected.")
+            logger.warning("No adapters selected")
             return flux_pipeline, {}
 
         loaded: Dict[str, Dict[str, torch.Tensor]] = {}
@@ -216,10 +241,10 @@ class OmniXLoRALoader:
             filename = self.ADAPTER_FILENAMES[adapter_name]
             adapter_path = adapter_dir / filename
             if not adapter_path.exists():
-                print(f"[OmniXLoRA] Missing adapter: {adapter_path}")
+                logger.warning(f"Missing adapter: {adapter_path}")
                 continue
 
-            print(f"[OmniXLoRA] Loading {adapter_name} from {adapter_path}")
+            logger.info(f"Loading {adapter_name} from {adapter_path}")
             state = load_file(str(adapter_path))
             flux_pipeline.load_lora_weights(
                 adapter_dir,
@@ -236,7 +261,7 @@ class OmniXLoRALoader:
 
         if adapter_names:
             flux_pipeline.set_adapters(adapter_names, adapter_weights=adapter_scales)
-            print(f"[OmniXLoRA] Active adapters: {adapter_names}")
+            logger.info(f"Active adapters: {adapter_names}")
 
         return flux_pipeline, loaded
 
@@ -351,7 +376,7 @@ class OmniXPerceptionDiffusers:
             raise ValueError(f"Adapter '{task}' not loaded. Available: {list(loaded_adapters)}")
 
         flux_pipeline.set_adapters([task], adapter_weights=[loaded_adapters[task]["scale"]])
-        print(f"[OmniXPerception-Diffusers] Task={task}, steps={num_steps}, noise={noise_strength}")
+        logger.info(f"Running perception - Task={task}, steps={num_steps}, noise={noise_strength}")
 
         packed_latents, latent_image_ids, height, width = self._encode_latents(flux_pipeline, panorama)
         latents, timesteps = self._prepare_schedule(
