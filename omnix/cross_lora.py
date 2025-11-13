@@ -13,6 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional, List, Dict, Any
 import comfy.model_management as model_management
+from .weight_converter import convert_omnix_weights_to_comfyui
 
 
 class CrossLoRALinear(nn.Module):
@@ -35,9 +36,18 @@ class CrossLoRALinear(nn.Module):
         in_features = self.base_linear.in_features
         out_features = self.base_linear.out_features
 
-        # Initialize LoRA matrices
-        lora_A = nn.Linear(in_features, rank, bias=False)
-        lora_B = nn.Linear(rank, out_features, bias=False)
+        # Initialize LoRA matrices with compatible dtype
+        base_dtype = self.base_linear.weight.dtype
+
+        # Handle fp8 quantization: fall back to bfloat16 since fp8 doesn't support initialization
+        if base_dtype in [torch.float8_e4m3fn, torch.float8_e5m2]:
+            lora_dtype = torch.bfloat16
+            print(f"[Cross-LoRA] Base layer is {base_dtype}, using bfloat16 for LoRA")
+        else:
+            lora_dtype = base_dtype
+
+        lora_A = nn.Linear(in_features, rank, bias=False, dtype=lora_dtype)
+        lora_B = nn.Linear(rank, out_features, bias=False, dtype=lora_dtype)
 
         # Initialize with small random values
         nn.init.kaiming_uniform_(lora_A.weight, a=5**0.5)
@@ -64,7 +74,7 @@ class CrossLoRALinear(nn.Module):
 
         Args:
             x: Input tensor
-            active_adapter: Name of adapter to use. If None, uses base linear only.
+            active_adapter: Name of adapter to use. If None, uses self.active_adapters.
 
         Returns:
             Output tensor
@@ -72,10 +82,16 @@ class CrossLoRALinear(nn.Module):
         # Base linear transformation
         result = self.base_linear(x)
 
+        # Determine which adapter to use
+        # Priority: parameter > self.active_adapters > None
+        adapter_to_use = active_adapter
+        if adapter_to_use is None and hasattr(self, 'active_adapters') and self.active_adapters:
+            adapter_to_use = self.active_adapters[0]
+
         # Apply LoRA if adapter is specified
-        if active_adapter is not None and active_adapter in self.lora_A:
-            lora_out = self.lora_B[active_adapter](self.lora_A[active_adapter](x))
-            result = result + lora_out * self.lora_scale[active_adapter]
+        if adapter_to_use is not None and adapter_to_use in self.lora_A:
+            lora_out = self.lora_B[adapter_to_use](self.lora_A[adapter_to_use](x))
+            result = result + lora_out * self.lora_scale[adapter_to_use]
 
         return result
 
@@ -103,61 +119,116 @@ def inject_cross_lora_into_model(
 
     print(f"[Cross-LoRA] Injecting adapters into Flux model on {device}")
 
+    # Convert OmniX weights to ComfyUI format
+    print(f"[Cross-LoRA] Converting {len(adapter_weights)} adapters to ComfyUI format...")
+    converted_weights = {}
+    for adapter_name, omnix_weights in adapter_weights.items():
+        converted_weights[adapter_name] = convert_omnix_weights_to_comfyui(omnix_weights)
+
+    # Debug: Print model structure to understand hierarchy
+    print(f"[Cross-LoRA Debug] Model type: {type(model)}")
+    print(f"[Cross-LoRA Debug] Model attributes: {dir(model)[:20]}")  # First 20 attrs
+
     # Access the Flux transformer
-    # ComfyUI structure: model.diffusion_model
+    # ComfyUI structure: model.diffusion_model or model.model.diffusion_model
     if hasattr(model, 'diffusion_model'):
         transformer = model.diffusion_model
+        print(f"[Cross-LoRA Debug] Found diffusion_model directly")
+    elif hasattr(model, 'model') and hasattr(model.model, 'diffusion_model'):
+        transformer = model.model.diffusion_model
+        print(f"[Cross-LoRA Debug] Found diffusion_model in model.model")
     elif hasattr(model, 'model'):
         transformer = model.model
+        print(f"[Cross-LoRA Debug] Using model.model")
     else:
         transformer = model
+        print(f"[Cross-LoRA Debug] Using model directly")
 
-    # Find and patch attention layers
-    # Flux typically has structure like: transformer.transformer_blocks[i].attn
+    print(f"[Cross-LoRA Debug] Transformer type: {type(transformer)}")
+
+    # List all children to see Flux structure
+    children = list(transformer.named_children())
+    print(f"[Cross-LoRA Debug] Transformer has {len(children)} children:")
+    for name, child in children:
+        print(f"  - {name}: {type(child).__name__}")
+        # If it's a ModuleList (like double_blocks or single_blocks), show first element
+        if type(child).__name__ == 'ModuleList' and len(child) > 0:
+            first_block = child[0]
+            block_children = list(first_block.named_children())
+            print(f"    Block[0] has {len(block_children)} children: {[n for n, _ in block_children[:5]]}")
+
+    # Find and patch attention layers in Flux
+    # Flux structure: double_blocks[i].img_attn, single_blocks[i].linear1/linear2
     patched_count = 0
 
-    def patch_module(module, prefix=""):
-        nonlocal patched_count
+    # Target double_blocks - these have img_attn modules
+    if hasattr(transformer, 'double_blocks'):
+        print(f"[Cross-LoRA] Found {len(transformer.double_blocks)} double_blocks")
+        for i, block in enumerate(transformer.double_blocks):
+            if hasattr(block, 'img_attn'):
+                img_attn = block.img_attn
+                print(f"[Cross-LoRA Debug] double_blocks[{i}].img_attn type: {type(img_attn).__name__}")
+                print(f"[Cross-LoRA Debug]   img_attn children: {list(img_attn.named_children())[:5]}")
 
-        for name, child in module.named_children():
-            full_name = f"{prefix}.{name}" if prefix else name
+                # Look for qkv or to_q/to_k/to_v inside img_attn
+                for attn_name, attn_child in img_attn.named_children():
+                    if isinstance(attn_child, nn.Linear) and any(x in attn_name.lower() for x in ['qkv', 'to_q', 'to_k', 'to_v']):
+                        print(f"[Cross-LoRA] Patching double_blocks[{i}].img_attn.{attn_name}")
 
-            # Target linear layers in attention modules
-            # Common targets: to_q, to_k, to_v, to_out
-            if isinstance(child, nn.Linear) and any(target in full_name for target in ["to_q", "to_k", "to_v", "to_out"]):
-                # Replace with CrossLoRALinear
-                cross_lora = CrossLoRALinear(child)
+                        # Create CrossLoRA wrapper
+                        cross_lora = CrossLoRALinear(attn_child)
 
-                # Add all configured adapters
-                for adapter_name, config in adapter_configs.items():
-                    rank = config.get('rank', 16)
-                    scale = config.get('scale', 1.0)
-                    targets = config.get('targets', ['to_q', 'to_k', 'to_v'])
+                        # Add all adapters
+                        for adapter_name, config in adapter_configs.items():
+                            rank = config.get('rank', 16)
+                            scale = config.get('scale', 1.0)
+                            cross_lora.add_adapter(adapter_name, rank=rank, scale=scale)
 
-                    # Check if this layer should get this adapter
-                    if any(t in full_name for t in targets):
-                        cross_lora.add_adapter(adapter_name, rank=rank, scale=scale)
+                            # Load converted weights if available
+                            layer_key = f"double_blocks.{i}.img_attn.{attn_name}"
+                            if adapter_name in converted_weights and layer_key in converted_weights[adapter_name]:
+                                try:
+                                    cross_lora.load_adapter_weights(adapter_name, converted_weights[adapter_name][layer_key])
+                                    print(f"[Cross-LoRA]   ✓ Loaded weights for {adapter_name}")
+                                except Exception as e:
+                                    print(f"[Cross-LoRA]   ⚠ Failed to load {adapter_name} weights: {e}")
 
-                        # Load weights if available
-                        if adapter_name in adapter_weights:
-                            # Find matching weights for this layer
-                            layer_weights = {}
-                            for key, value in adapter_weights[adapter_name].items():
-                                if full_name in key:
-                                    # Extract lora_A or lora_B from key
-                                    layer_weights[key.split('.')[-1]] = value
+                        # Replace layer
+                        setattr(img_attn, attn_name, cross_lora.to(device))
+                        patched_count += 1
 
-                            if layer_weights:
-                                cross_lora.load_adapter_weights(adapter_name, layer_weights)
-                                patched_count += 1
+    # Target single_blocks - these have linear1 and linear2
+    if hasattr(transformer, 'single_blocks'):
+        print(f"[Cross-LoRA] Found {len(transformer.single_blocks)} single_blocks")
+        for i, block in enumerate(transformer.single_blocks):
+            for linear_name in ['linear1', 'linear2']:
+                if hasattr(block, linear_name):
+                    linear_layer = getattr(block, linear_name)
+                    if isinstance(linear_layer, nn.Linear):
+                        print(f"[Cross-LoRA] Patching single_blocks[{i}].{linear_name}")
 
-                # Replace the original linear layer
-                setattr(module, name, cross_lora.to(device))
-            else:
-                # Recursively patch child modules
-                patch_module(child, full_name)
+                        # Create CrossLoRA wrapper
+                        cross_lora = CrossLoRALinear(linear_layer)
 
-    patch_module(transformer)
+                        # Add all adapters
+                        for adapter_name, config in adapter_configs.items():
+                            rank = config.get('rank', 16)
+                            scale = config.get('scale', 1.0)
+                            cross_lora.add_adapter(adapter_name, rank=rank, scale=scale)
+
+                            # Load converted weights if available
+                            layer_key = f"single_blocks.{i}.{linear_name}"
+                            if adapter_name in converted_weights and layer_key in converted_weights[adapter_name]:
+                                try:
+                                    cross_lora.load_adapter_weights(adapter_name, converted_weights[adapter_name][layer_key])
+                                    if i == 0:  # Only print for first block to reduce spam
+                                        print(f"[Cross-LoRA]   ✓ Loaded weights for {adapter_name} in single_blocks")
+                                except Exception as e:
+                                    print(f"[Cross-LoRA]   ⚠ Failed to load {adapter_name} weights for single_blocks[{i}].{linear_name}: {e}")
+
+                        # Replace layer
+                        setattr(block, linear_name, cross_lora.to(device))
+                        patched_count += 1
 
     print(f"[Cross-LoRA] Patched {patched_count} layers with adapters")
 

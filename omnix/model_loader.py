@@ -15,7 +15,7 @@ import comfy.model_management as mm
 import comfy.sd
 import comfy.utils
 
-from .adapters import AdapterManager, OmniXAdapters
+from .adapters import OmniXAdapters
 
 
 class OmniXModelLoader:
@@ -135,11 +135,8 @@ class OmniXModelLoader:
         Returns:
             OmniXModelLoader instance
         """
-        # Load adapters
-        adapter_manager = AdapterManager(adapter_path, dtype=dtype)
-        adapters = OmniXAdapters(adapter_manager)
+        adapters = OmniXAdapters(adapter_path, dtype=dtype)
 
-        # Create loader
         loader = cls(
             flux_model=model,
             adapters=adapters,

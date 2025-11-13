@@ -11,11 +11,25 @@ specialize the model for different perception tasks (depth, normal, albedo, PBR)
 import torch
 import torch.nn as nn
 from pathlib import Path
-from typing import Dict, Optional, List, Any
+from typing import Dict, Optional, List, Any, Union
 import safetensors.torch
 import os
 import gc
-from .cross_lora import inject_cross_lora_into_model, set_active_adapters, remove_cross_lora_from_model
+try:
+    from .cross_lora import inject_cross_lora_into_model, set_active_adapters, remove_cross_lora_from_model
+except ModuleNotFoundError:  # pragma: no cover - allows running unit tests without ComfyUI
+    def _comfy_missing(*_, **__):
+        raise RuntimeError(
+            "Cross-LoRA utilities require ComfyUI. Please run inside a ComfyUI environment to inject adapters."
+        )
+
+    inject_cross_lora_into_model = _comfy_missing
+    set_active_adapters = _comfy_missing
+    remove_cross_lora_from_model = _comfy_missing
+from .adapters_old import AdapterModule as LegacyAdapterModule
+
+# Re-export AdapterModule for backwards compatibility
+AdapterModule = LegacyAdapterModule
 
 
 # Adapter configurations based on OmniX repository
@@ -34,32 +48,32 @@ ADAPTER_FILENAMES = {
 # LoRA configuration for each adapter type
 ADAPTER_CONFIGS = {
     "rgb_generation": {
-        "rank": 16,
+        "rank": 64,  # OmniX uses rank 64
         "scale": 1.0,
         "targets": ["to_q", "to_k", "to_v", "to_out"],
     },
     "distance": {
-        "rank": 16,
+        "rank": 64,  # OmniX uses rank 64
         "scale": 1.0,
         "targets": ["to_q", "to_k", "to_v"],
     },
     "normal": {
-        "rank": 16,
+        "rank": 64,  # OmniX uses rank 64
         "scale": 1.0,
         "targets": ["to_q", "to_k", "to_v"],
     },
     "albedo": {
-        "rank": 16,
+        "rank": 64,  # OmniX uses rank 64
         "scale": 1.0,
         "targets": ["to_q", "to_k", "to_v"],
     },
     "pbr": {
-        "rank": 16,
+        "rank": 64,  # OmniX uses rank 64
         "scale": 1.0,
         "targets": ["to_q", "to_k", "to_v"],
     },
     "semantic": {
-        "rank": 16,
+        "rank": 64,  # OmniX uses rank 64
         "scale": 1.0,
         "targets": ["to_q", "to_k", "to_v"],
     },
@@ -87,8 +101,15 @@ class AdapterManager:
         self.device = device if device is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = dtype
 
+        if not self.adapter_dir.exists():
+            raise FileNotFoundError(f"Adapter directory not found: {self.adapter_dir}")
+
         # Loaded adapter weights
         self.adapter_weights: Dict[str, Dict[str, torch.Tensor]] = {}
+
+        # Legacy compatibility caches (old AdapterModule API)
+        self._legacy_loaded_adapters: Dict[str, LegacyAdapterModule] = {}
+        self._loaded_adapters = self._legacy_loaded_adapters  # attribute expected by legacy tests
 
         # Track which adapters are currently injected
         self.injected_model = None
@@ -119,8 +140,12 @@ class AdapterManager:
 
         filename = ADAPTER_FILENAMES[adapter_type]
         adapter_path = self.adapter_dir / filename
+        legacy_path = self.adapter_dir / f"{adapter_type}_adapter.safetensors"
 
         # Check if file exists
+        if not adapter_path.exists() and legacy_path.exists():
+            adapter_path = legacy_path
+
         if not adapter_path.exists():
             raise FileNotFoundError(
                 f"Adapter file not found: {adapter_path}\n"
@@ -257,6 +282,42 @@ class AdapterManager:
             "dtype": str(self.dtype),
         }
 
+    # ------------------------------------------------------------------
+    # Legacy compatibility layer (AdapterModule-style API)
+    # ------------------------------------------------------------------
+    def get_adapter(self, adapter_type: str) -> LegacyAdapterModule:
+        """
+        Return an AdapterModule instance for compatibility with the legacy API.
+        """
+        if adapter_type in self._legacy_loaded_adapters:
+            return self._legacy_loaded_adapters[adapter_type]
+
+        weights = self.load_adapter(adapter_type)
+        module = LegacyAdapterModule(weights, dtype=self.dtype)
+        self._legacy_loaded_adapters[adapter_type] = module
+        return module
+
+    def list_available_adapters(self) -> List[str]:
+        """List adapter types that exist on disk."""
+        available = []
+        for adapter_type, filename in ADAPTER_FILENAMES.items():
+            if (
+                (self.adapter_dir / filename).exists()
+                or (self.adapter_dir / f"{adapter_type}_adapter.safetensors").exists()
+            ):
+                available.append(adapter_type)
+        return available
+
+    def unload_adapter(self, adapter_type: str):
+        """Unload adapter weights from caches to reclaim VRAM/CPU memory."""
+        self.adapter_weights.pop(adapter_type, None)
+        module = self._legacy_loaded_adapters.pop(adapter_type, None)
+        if module is not None:
+            del module
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
 
 class OmniXAdapters:
     """
@@ -266,11 +327,16 @@ class OmniXAdapters:
     the new LoRA-based implementation under the hood.
     """
 
-    def __init__(self, adapter_dir: Path, dtype: torch.dtype = torch.float16):
-        """Initialize with adapter directory"""
-        self.manager = AdapterManager(adapter_dir, dtype=dtype)
-        self.adapter_dir = adapter_dir
-        self.dtype = dtype
+    def __init__(self, adapter_dir: Union[Path, AdapterManager], dtype: torch.dtype = torch.float16):
+        """Initialize with adapter directory or an existing AdapterManager."""
+        if isinstance(adapter_dir, AdapterManager):
+            self.manager = adapter_dir
+            self.adapter_dir = adapter_dir.adapter_dir
+            self.dtype = adapter_dir.dtype
+        else:
+            self.manager = AdapterManager(adapter_dir, dtype=dtype)
+            self.adapter_dir = Path(adapter_dir)
+            self.dtype = dtype
 
     def get_adapter(self, adapter_type: str) -> Dict[str, torch.Tensor]:
         """
@@ -279,15 +345,15 @@ class OmniXAdapters:
         Note: In the new implementation, adapters are injected into the model,
         so this just returns the raw weights for inspection.
         """
-        return self.manager.load_adapter(adapter_type)
+        return self.manager.get_adapter(adapter_type)
 
     def list_available_adapters(self) -> List[str]:
         """List all available adapter types"""
-        available = []
-        for adapter_type, filename in ADAPTER_FILENAMES.items():
-            if (self.adapter_dir / filename).exists():
-                available.append(adapter_type)
-        return available
+        return self.manager.list_available_adapters()
+
+    # Backwards-compatible alias for tests
+    def list_available(self) -> List[str]:  # pragma: no cover - legacy API
+        return self.list_available_adapters()
 
     def inject_into_model(self, model: Any, adapter_type: str, strength: float = 1.0):
         """

@@ -88,7 +88,7 @@ def validate_panorama_aspect_ratio(
         raise ValueError(
             f"Invalid panorama aspect ratio {current_ratio:.2f} (expected ~{target_ratio:.1f}:1)\n"
             f"Image dimensions: {width}×{height}\n"
-            f"Use OmniXPanoramaValidator node to fix aspect ratio."
+            f"Please crop or pad the panorama to a 2:1 ratio before running perception."
         )
 
     return True

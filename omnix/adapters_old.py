@@ -64,7 +64,10 @@ class AdapterModule(nn.Module):
         """
         # Ensure input is on same device and dtype as adapter
         device = next(iter(self.state_dict_cache.values())).device if self.state_dict_cache else x.device
-        x = x.to(device=device, dtype=self.dtype)
+        original_dtype = x.dtype
+        original_device = x.device
+        working = x.to(device=device, dtype=self.dtype)
+        modified = False
 
         # If adapter has projection layers, apply them
         # This is a simplified implementation - real OmniX adapters may have
@@ -77,19 +80,21 @@ class AdapterModule(nn.Module):
             proj_out_weight = self.state_dict_cache['proj_out.weight']
 
             # Flatten spatial dimensions if needed
-            original_shape = x.shape
-            if len(x.shape) == 4:  # (B, C, H, W)
-                B, C, H, W = x.shape
-                x = x.reshape(B, C, H * W).transpose(1, 2)  # (B, H*W, C)
+            original_shape = working.shape
+            if len(working.shape) == 4:  # (B, C, H, W)
+                B, C, H, W = working.shape
+                working = working.reshape(B, C, H * W).transpose(1, 2)  # (B, H*W, C)
 
             # Apply projections
-            x = torch.nn.functional.linear(x, proj_in_weight)
-            x = torch.nn.functional.gelu(x)  # Standard activation
-            x = torch.nn.functional.linear(x, proj_out_weight)
+            working = torch.nn.functional.linear(working, proj_in_weight)
+            working = torch.nn.functional.gelu(working)  # Standard activation
+            working = torch.nn.functional.linear(working, proj_out_weight)
 
             # Restore original shape
             if len(original_shape) == 4:
-                x = x.transpose(1, 2).reshape(original_shape)
+                working = working.transpose(1, 2).reshape(original_shape)
+
+            modified = True
 
         # If adapter has LoRA-style weights (down_proj + up_proj)
         elif 'lora_down.weight' in self.state_dict_cache and 'lora_up.weight' in self.state_dict_cache:
@@ -98,12 +103,12 @@ class AdapterModule(nn.Module):
             lora_up = self.state_dict_cache['lora_up.weight']
             scale = self.state_dict_cache.get('lora_scale', torch.tensor(1.0))
 
-            original_shape = x.shape
-            if len(x.shape) == 4:  # (B, C, H, W)
-                B, C, H, W = x.shape
-                x_flat = x.reshape(B, C, H * W).transpose(1, 2)  # (B, H*W, C)
+            original_shape = working.shape
+            if len(working.shape) == 4:  # (B, C, H, W)
+                B, C, H, W = working.shape
+                x_flat = working.reshape(B, C, H * W).transpose(1, 2)  # (B, H*W, C)
             else:
-                x_flat = x
+                x_flat = working
 
             # LoRA transformation
             delta = torch.nn.functional.linear(x_flat, lora_down)
@@ -112,14 +117,19 @@ class AdapterModule(nn.Module):
 
             # Restore shape
             if len(original_shape) == 4:
-                x = x_adapted.transpose(1, 2).reshape(original_shape)
+                working = x_adapted.transpose(1, 2).reshape(original_shape)
             else:
-                x = x_adapted
+                working = x_adapted
+
+            modified = True
 
         # If no recognized structure, return input unchanged (backward compatibility)
         # In production, actual OmniX weights will have one of the above structures
 
-        return x
+        if not modified:
+            return x
+
+        return working.to(device=original_device, dtype=original_dtype)
 
 
 class AdapterManager:

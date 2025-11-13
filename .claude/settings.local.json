@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(python:*)",
+      "Bash(git clone:*)",
+      "Bash(.venvScriptspython.exe -m pip install diffusers)",
+      "Bash(=0.29.0 accelerate transformers --upgrade)",
+      "Bash(\".venv\\Scripts\\python.exe\" -m pip install diffusers)",
+      "Bash(\".venv\\Scripts\\python.exe\" -c \"from diffusers import FluxPipeline; print(''FluxPipeline available'')\")",
+      "Bash(\".venv\\Scripts\\python.exe\" -c \"import peft; print(''PEFT available'')\")",
+      "Bash(\".venv\\Scripts\\python.exe\":*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

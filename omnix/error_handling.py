@@ -91,7 +91,7 @@ class InvalidPanoramaError(OmniXError):
             f"Expected aspect ratio: {expected_ratio:.1f}:1 (equirectangular)\n"
             f"\n"
             f"To fix:\n"
-            f"1. Use OmniXPanoramaValidator node to fix aspect ratio\n"
+            f"1. Crop or pad the panorama so width is exactly 2x height\n"
             f"2. Or manually resize to 2:1 ratio (e.g., 2048x1024, 4096x2048)\n"
             f"3. Choose fix method: crop, pad, or stretch"
         )
@@ -264,7 +264,7 @@ def provide_helpful_error(error: Exception, context: str = "") -> str:
             "Tensor shape mismatch. Suggestions:\n"
             "1. Check input image dimensions\n"
             "2. Ensure panorama is 2:1 aspect ratio\n"
-            "3. Use OmniXPanoramaValidator to fix dimensions\n"
+            "3. Ensure the panorama is 2:1 before running perception\n"
         )
     elif "dtype" in error_msg.lower():
         message += (

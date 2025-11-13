@@ -1,9 +1,32 @@
 """
-ComfyUI-OmniX: OmniX Panorama Generation and Perception Custom Nodes
-Integrates OmniX adapters with ComfyUI's existing Flux pipeline
+ComfyUI-OmniX: Diffusers-based OmniX perception nodes for ComfyUI.
 """
 
-from .nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
+import logging
+from pathlib import Path
 
-__all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
-__version__ = '1.0.0'
+NODE_CLASS_MAPPINGS = {}
+NODE_DISPLAY_NAME_MAPPINGS = {}
+
+try:
+    try:
+        from .nodes_diffusers import (  # type: ignore
+            NODE_CLASS_MAPPINGS as DIFFUSERS_NODES,
+            NODE_DISPLAY_NAME_MAPPINGS as DIFFUSERS_DISPLAY,
+        )
+    except ImportError:
+        import sys
+
+        sys.path.append(str(Path(__file__).resolve().parent))
+        from nodes_diffusers import (  # type: ignore
+            NODE_CLASS_MAPPINGS as DIFFUSERS_NODES,
+            NODE_DISPLAY_NAME_MAPPINGS as DIFFUSERS_DISPLAY,
+        )
+
+    NODE_CLASS_MAPPINGS.update(DIFFUSERS_NODES)
+    NODE_DISPLAY_NAME_MAPPINGS.update(DIFFUSERS_DISPLAY)
+except Exception as exc:  # pragma: no cover - allows running unit tests without ComfyUI
+    logging.getLogger(__name__).warning("Diffusers nodes not registered: %s", exc)
+
+__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
+__version__ = "1.1.0"

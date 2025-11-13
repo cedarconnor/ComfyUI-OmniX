@@ -257,7 +257,7 @@
   "groups": [],
   "config": {},
   "extra": {
-    "description": "Diffusers OmniX perception example",
+    "description": "Quick diffusion test",
     "ds": {
       "scale": 0.9,
       "offset": [

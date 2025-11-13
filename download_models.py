@@ -245,9 +245,9 @@ Files downloaded (keeping original HuggingFace names):
         print("\n📝 Next steps:")
         print("1. Verify files in:", output_dir)
         print("2. Restart ComfyUI if it's running")
-        print("3. Add 'OmniXAdapterLoader' node to your workflow")
-        print("4. Select 'omnix-base' preset and 'fp16' precision")
-        print("\n🎉 You're ready to generate panoramas!")
+        print("3. Build the Diffusers workflow: FluxDiffusersLoader -> OmniXLoRALoader -> OmniXPerceptionDiffusers")
+        print("4. Point OmniXLoRALoader at this directory and enable the adapters you need")
+        print("\n?? You're ready to extract perception maps!")
 
     except Exception as e:
         print(f"\n❌ Error: {e}")
