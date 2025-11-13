@@ -4,13 +4,24 @@ End-to-End Workflow Tests
 
 Tests the complete OmniX pipeline from model loading to generation/perception.
 
+⚠️  STATUS: PARTIALLY IMPLEMENTED
+    The current implementation uses Diffusers-based nodes exclusively.
+    These tests reference legacy classes that were replaced during development.
+
+CURRENT IMPLEMENTATION:
+    - ✅ Diffusers-based nodes (nodes_diffusers.py)
+    - ✅ FluxDiffusersLoader, OmniXLoRALoader, OmniXPerceptionDiffusers
+    - ✅ Adapter management (adapters.py, cross_lora.py)
+
+TESTS TO UPDATE:
+    - Replace OmniXConfig references with actual Diffusers workflow
+    - Replace GenerationConfig with FluxPipeline parameters
+    - Update to test Diffusers-based perception instead of legacy OmniXPerceiver
+
 NOTE: These tests require:
 1. ComfyUI to be installed
 2. Flux.1-dev model to be available
 3. OmniX adapter weights to be downloaded
-
-FIXME: Tests currently reference non-existent OmniXConfig and GenerationConfig classes
-TODO: Rewrite tests to use actual classes from omnix module
 
 Run with: python test_e2e_workflow.py
 """

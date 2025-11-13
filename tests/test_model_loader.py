@@ -1,8 +1,22 @@
 """
 Unit tests for OmniX model loader
 
-NOTE: These tests currently reference non-existent OmniXConfig class.
-TODO: Rewrite tests to use actual OmniXModelLoader class from omnix/model_loader.py
+⚠️  STATUS: NEEDS REWRITE FOR DIFFUSERS IMPLEMENTATION
+
+LEGACY TESTS:
+    These tests were written for a config-based model loader that was replaced
+    with the Diffusers-based implementation.
+
+CURRENT IMPLEMENTATION:
+    - Model loading happens via FluxDiffusersLoader node
+    - No OmniXConfig class exists (configuration is done via node inputs)
+    - OmniXModelLoader in omnix/model_loader.py is a legacy compatibility wrapper
+
+RECOMMENDED UPDATES:
+    - Test FluxDiffusersLoader.load_pipeline()
+    - Test OmniXLoRALoader.load_adapters()
+    - Test adapter injection and activation
+    - Remove OmniXConfig references entirely
 """
 
 import unittest

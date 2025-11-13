@@ -117,45 +117,27 @@ def inject_cross_lora_into_model(
     if device is None:
         device = model_management.get_torch_device()
 
-    print(f"[Cross-LoRA] Injecting adapters into Flux model on {device}")
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"Injecting adapters into Flux model on {device}")
 
     # Convert OmniX weights to ComfyUI format
-    print(f"[Cross-LoRA] Converting {len(adapter_weights)} adapters to ComfyUI format...")
+    logger.info(f"Converting {len(adapter_weights)} adapters to ComfyUI format...")
     converted_weights = {}
     for adapter_name, omnix_weights in adapter_weights.items():
         converted_weights[adapter_name] = convert_omnix_weights_to_comfyui(omnix_weights)
-
-    # Debug: Print model structure to understand hierarchy
-    print(f"[Cross-LoRA Debug] Model type: {type(model)}")
-    print(f"[Cross-LoRA Debug] Model attributes: {dir(model)[:20]}")  # First 20 attrs
 
     # Access the Flux transformer
     # ComfyUI structure: model.diffusion_model or model.model.diffusion_model
     if hasattr(model, 'diffusion_model'):
         transformer = model.diffusion_model
-        print(f"[Cross-LoRA Debug] Found diffusion_model directly")
     elif hasattr(model, 'model') and hasattr(model.model, 'diffusion_model'):
         transformer = model.model.diffusion_model
-        print(f"[Cross-LoRA Debug] Found diffusion_model in model.model")
     elif hasattr(model, 'model'):
         transformer = model.model
-        print(f"[Cross-LoRA Debug] Using model.model")
     else:
         transformer = model
-        print(f"[Cross-LoRA Debug] Using model directly")
-
-    print(f"[Cross-LoRA Debug] Transformer type: {type(transformer)}")
-
-    # List all children to see Flux structure
-    children = list(transformer.named_children())
-    print(f"[Cross-LoRA Debug] Transformer has {len(children)} children:")
-    for name, child in children:
-        print(f"  - {name}: {type(child).__name__}")
-        # If it's a ModuleList (like double_blocks or single_blocks), show first element
-        if type(child).__name__ == 'ModuleList' and len(child) > 0:
-            first_block = child[0]
-            block_children = list(first_block.named_children())
-            print(f"    Block[0] has {len(block_children)} children: {[n for n, _ in block_children[:5]]}")
 
     # Find and patch attention layers in Flux
     # Flux structure: double_blocks[i].img_attn, single_blocks[i].linear1/linear2
@@ -163,17 +145,15 @@ def inject_cross_lora_into_model(
 
     # Target double_blocks - these have img_attn modules
     if hasattr(transformer, 'double_blocks'):
-        print(f"[Cross-LoRA] Found {len(transformer.double_blocks)} double_blocks")
+        logger.debug(f"Found {len(transformer.double_blocks)} double_blocks")
         for i, block in enumerate(transformer.double_blocks):
             if hasattr(block, 'img_attn'):
                 img_attn = block.img_attn
-                print(f"[Cross-LoRA Debug] double_blocks[{i}].img_attn type: {type(img_attn).__name__}")
-                print(f"[Cross-LoRA Debug]   img_attn children: {list(img_attn.named_children())[:5]}")
 
                 # Look for qkv or to_q/to_k/to_v inside img_attn
                 for attn_name, attn_child in img_attn.named_children():
                     if isinstance(attn_child, nn.Linear) and any(x in attn_name.lower() for x in ['qkv', 'to_q', 'to_k', 'to_v']):
-                        print(f"[Cross-LoRA] Patching double_blocks[{i}].img_attn.{attn_name}")
+                        logger.debug(f"Patching double_blocks[{i}].img_attn.{attn_name}")
 
                         # Create CrossLoRA wrapper
                         cross_lora = CrossLoRALinear(attn_child)
@@ -189,9 +169,9 @@ def inject_cross_lora_into_model(
                             if adapter_name in converted_weights and layer_key in converted_weights[adapter_name]:
                                 try:
                                     cross_lora.load_adapter_weights(adapter_name, converted_weights[adapter_name][layer_key])
-                                    print(f"[Cross-LoRA]   ✓ Loaded weights for {adapter_name}")
+                                    logger.debug(f"Loaded weights for {adapter_name} in layer {layer_key}")
                                 except Exception as e:
-                                    print(f"[Cross-LoRA]   ⚠ Failed to load {adapter_name} weights: {e}")
+                                    logger.warning(f"Failed to load {adapter_name} weights for {layer_key}: {e}")
 
                         # Replace layer
                         setattr(img_attn, attn_name, cross_lora.to(device))
@@ -199,13 +179,13 @@ def inject_cross_lora_into_model(
 
     # Target single_blocks - these have linear1 and linear2
     if hasattr(transformer, 'single_blocks'):
-        print(f"[Cross-LoRA] Found {len(transformer.single_blocks)} single_blocks")
+        logger.debug(f"Found {len(transformer.single_blocks)} single_blocks")
         for i, block in enumerate(transformer.single_blocks):
             for linear_name in ['linear1', 'linear2']:
                 if hasattr(block, linear_name):
                     linear_layer = getattr(block, linear_name)
                     if isinstance(linear_layer, nn.Linear):
-                        print(f"[Cross-LoRA] Patching single_blocks[{i}].{linear_name}")
+                        logger.debug(f"Patching single_blocks[{i}].{linear_name}")
 
                         # Create CrossLoRA wrapper
                         cross_lora = CrossLoRALinear(linear_layer)
@@ -221,16 +201,16 @@ def inject_cross_lora_into_model(
                             if adapter_name in converted_weights and layer_key in converted_weights[adapter_name]:
                                 try:
                                     cross_lora.load_adapter_weights(adapter_name, converted_weights[adapter_name][layer_key])
-                                    if i == 0:  # Only print for first block to reduce spam
-                                        print(f"[Cross-LoRA]   ✓ Loaded weights for {adapter_name} in single_blocks")
+                                    if i == 0:  # Only log for first block to reduce verbosity
+                                        logger.debug(f"Loaded weights for {adapter_name} in single_blocks")
                                 except Exception as e:
-                                    print(f"[Cross-LoRA]   ⚠ Failed to load {adapter_name} weights for single_blocks[{i}].{linear_name}: {e}")
+                                    logger.warning(f"Failed to load {adapter_name} weights for {layer_key}: {e}")
 
                         # Replace layer
                         setattr(block, linear_name, cross_lora.to(device))
                         patched_count += 1
 
-    print(f"[Cross-LoRA] Patched {patched_count} layers with adapters")
+    logger.info(f"Patched {patched_count} layers with adapters")
 
     return model
 
@@ -243,6 +223,9 @@ def set_active_adapters(model: Any, adapter_name: str):
         model: Model with injected Cross-LoRA adapters
         adapter_name: Name of adapter to activate
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     # Access transformer
     if hasattr(model, 'diffusion_model'):
         transformer = model.diffusion_model
@@ -260,7 +243,7 @@ def set_active_adapters(model: Any, adapter_name: str):
                 set_adapter_recursive(child)
 
     set_adapter_recursive(transformer)
-    print(f"[Cross-LoRA] Activated adapter: {adapter_name}")
+    logger.info(f"Activated adapter: {adapter_name}")
 
 
 def remove_cross_lora_from_model(model: Any):
@@ -270,6 +253,9 @@ def remove_cross_lora_from_model(model: Any):
     Args:
         model: Model with injected Cross-LoRA adapters
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     # Access transformer
     if hasattr(model, 'diffusion_model'):
         transformer = model.diffusion_model
@@ -293,6 +279,6 @@ def remove_cross_lora_from_model(model: Any):
 
     restore_module(transformer)
 
-    print(f"[Cross-LoRA] Removed {removed_count} Cross-LoRA layers")
+    logger.info(f"Removed {removed_count} Cross-LoRA layers")
 
     return model

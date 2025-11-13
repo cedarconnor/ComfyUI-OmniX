@@ -56,7 +56,7 @@ See [DIFFUSERS_IMPLEMENTATION.md](DIFFUSERS_IMPLEMENTATION.md) for implementatio
 
 ```bash
 cd ComfyUI/custom_nodes/
-git clone https://github.com/[YOUR_USERNAME]/ComfyUI-OmniX.git
+git clone https://github.com/cedarconnor/ComfyUI-OmniX.git
 cd ComfyUI-OmniX
 pip install -r requirements.txt
 ```
@@ -68,7 +68,7 @@ pip install -r requirements.txt
 cd /path/to/ComfyUI/custom_nodes/
 
 # Clone this repository
-git clone https://github.com/[YOUR_USERNAME]/ComfyUI-OmniX.git
+git clone https://github.com/cedarconnor/ComfyUI-OmniX.git
 
 # Install dependencies
 pip install -r ComfyUI-OmniX/requirements.txt
@@ -309,8 +309,8 @@ Apache License 2.0 - see LICENSE file for details.
 
 ## Support
 
-- **Issues**: https://github.com/[YOUR_USERNAME]/ComfyUI-OmniX/issues
-- **Discussions**: https://github.com/[YOUR_USERNAME]/ComfyUI-OmniX/discussions
+- **Issues**: https://github.com/cedarconnor/ComfyUI-OmniX/issues
+- **Discussions**: https://github.com/cedarconnor/ComfyUI-OmniX/discussions
 - **ComfyUI Discord**: https://discord.gg/comfyui
 
 ---
