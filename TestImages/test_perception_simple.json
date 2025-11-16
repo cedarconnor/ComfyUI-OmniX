@@ -1,0 +1,283 @@
+{
+  "id": "27f0485d-1805-4d20-bfa7-0f0f1d939776",
+  "revision": 0,
+  "last_node_id": 18,
+  "last_link_id": 19,
+  "nodes": [
+    {
+      "id": 13,
+      "type": "OmniXLoRALoader",
+      "pos": [
+        -82.46093149923892,
+        917.7653271033665
+      ],
+      "size": [
+        270,
+        198
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "flux_pipeline",
+          "type": "FLUX_PIPELINE",
+          "link": 19
+        }
+      ],
+      "outputs": [
+        {
+          "name": "flux_pipeline",
+          "type": "FLUX_PIPELINE",
+          "links": [
+            14
+          ]
+        },
+        {
+          "name": "loaded_adapters",
+          "type": "OMNIX_ADAPTERS",
+          "links": [
+            15
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "cedarconnor/ComfyUI-OmniX",
+        "ver": "e5d8e788ce09a6a75b5441687bf6067d51027ced",
+        "Node name for S&R": "OmniXLoRALoader"
+      },
+      "widgets_values": [
+        "C:/ComfyUI/models/loras/omnix",
+        true,
+        true,
+        true,
+        false,
+        1
+      ]
+    },
+    {
+      "id": 17,
+      "type": "FluxDiffusersLoader",
+      "pos": [
+        -445.82489596454434,
+        946.8310705208117
+      ],
+      "size": [
+        270,
+        122
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "flux_pipeline",
+          "type": "FLUX_PIPELINE",
+          "links": [
+            19
+          ]
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "links": null
+        },
+        {
+          "name": "text_encoder",
+          "type": "TEXT_ENCODER",
+          "links": null
+        }
+      ],
+      "properties": {
+        "aux_id": "cedarconnor/ComfyUI-OmniX",
+        "ver": "4f361f512b6dee88587fc7346a7bd0e7f55e47f9",
+        "Node name for S&R": "FluxDiffusersLoader"
+      },
+      "widgets_values": [
+        "bfloat16",
+        "flux1-dev.safetensors"
+      ]
+    },
+    {
+      "id": 14,
+      "type": "OmniXPerceptionDiffusers",
+      "pos": [
+        352.4208068234805,
+        905.812271152914
+      ],
+      "size": [
+        290.484375,
+        170
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "flux_pipeline",
+          "type": "FLUX_PIPELINE",
+          "link": 14
+        },
+        {
+          "name": "loaded_adapters",
+          "type": "OMNIX_ADAPTERS",
+          "link": 15
+        },
+        {
+          "name": "panorama",
+          "type": "IMAGE",
+          "link": 17
+        }
+      ],
+      "outputs": [
+        {
+          "name": "perception_output",
+          "type": "IMAGE",
+          "links": [
+            16
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "cedarconnor/ComfyUI-OmniX",
+        "ver": "e5d8e788ce09a6a75b5441687bf6067d51027ced",
+        "Node name for S&R": "OmniXPerceptionDiffusers"
+      },
+      "widgets_values": [
+        "distance",
+        28,
+        3.5,
+        0.75
+      ]
+    },
+    {
+      "id": 15,
+      "type": "PreviewImage",
+      "pos": [
+        727.3279352091156,
+        949.6244966592141
+      ],
+      "size": [
+        140,
+        246
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 16
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.67",
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 16,
+      "type": "LoadImage",
+      "pos": [
+        -85.72311549043931,
+        1166.3663093222297
+      ],
+      "size": [
+        274.080078125,
+        314
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            17
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.67",
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "1_PortoRiverside.jpg",
+        "image"
+      ]
+    }
+  ],
+  "links": [
+    [
+      14,
+      13,
+      0,
+      14,
+      0,
+      "FLUX_PIPELINE"
+    ],
+    [
+      15,
+      13,
+      1,
+      14,
+      1,
+      "OMNIX_ADAPTERS"
+    ],
+    [
+      16,
+      14,
+      0,
+      15,
+      0,
+      "IMAGE"
+    ],
+    [
+      17,
+      16,
+      0,
+      14,
+      2,
+      "IMAGE"
+    ],
+    [
+      19,
+      17,
+      0,
+      13,
+      0,
+      "FLUX_PIPELINE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.7627768444385467,
+      "offset": [
+        508.68594188538464,
+        -756.5622259986528
+      ]
+    },
+    "description": "Simple test workflow for OmniX perception with 5 denoising steps for fast iteration",
+    "frontendVersion": "1.28.8",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

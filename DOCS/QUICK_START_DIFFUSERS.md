@@ -33,9 +33,8 @@ This reloads the Python modules including our new Diffusers nodes.
 1. **Add FluxDiffusersLoader node**
    - Find in: `OmniX/Diffusers` category
    - Settings:
-     - `load_method`: "local_file" (if you have Flux downloaded) OR "huggingface" (to download)
-     - `local_checkpoint`: Select your local file (e.g., "flux1-dev.sft") if using local_file
-     - `model_id`: "black-forest-labs/FLUX.1-dev" (if using huggingface method)
+     - Confirm the full Diffusers config tree from `black-forest-labs/FLUX.1-dev` (subfolders: `scheduler/`, `transformer/`, `text_encoder/`, `text_encoder_2/`, `tokenizer/`, `tokenizer_2/`, `vae/`) lives in `C:/ComfyUI/models/diffusers/`
+     - `local_checkpoint`: Select one of your local files (e.g., "flux1-dev.safetensors")
      - `torch_dtype`: "bfloat16" (recommended for best speed/quality)
 
 2. **Add OmniXLoRALoader node**
@@ -69,32 +68,32 @@ This reloads the Python modules including our new Diffusers nodes.
 
 1. **Queue Prompt** (or press Ctrl+Enter)
 
-2. **First Run**: Will download FLUX.1-dev (~30GB)
-   - This happens once
-   - Cached for future use
-   - Takes 10-30 minutes depending on internet
+2. **First Run**: Uses your offline Flux files
+   - No download occurs
+   - If loading fails, double-check the files listed above
 
 3. **Expected Console Output**:
 ```
-[FluxDiffusers] Loading Flux from black-forest-labs/FLUX.1-dev
+[FluxDiffusers] Loading Flux from C:\ComfyUI\models\diffusers\flux1-dev.safetensors
+[FluxDiffusers] Using Diffusers config from C:\ComfyUI\models\diffusers
 [FluxDiffusers] Device: cuda:0, dtype: torch.bfloat16
-[FluxDiffusers] ✓ Pipeline loaded successfully
+[FluxDiffusers] Pipeline loaded successfully
 
 [OmniXLoRA] Loading adapters: ['distance', 'normal', 'albedo']
 [OmniXLoRA] Loading distance from C:\ComfyUI\models\loras\omnix\rgb_to_depth_depth.safetensors
-[OmniXLoRA] ✓ Loaded distance: 456 weights
+[OmniXLoRA] Loaded distance: 456 weights
 [OmniXLoRA] Loading normal from C:\ComfyUI\models\loras\omnix\rgb_to_normal_normal.safetensors
-[OmniXLoRA] ✓ Loaded normal: 456 weights
+[OmniXLoRA] Loaded normal: 456 weights
 [OmniXLoRA] Loading albedo from C:\ComfyUI\models\loras\omnix\rgb_to_albedo_albedo.safetensors
-[OmniXLoRA] ✓ Loaded albedo: 456 weights
-[OmniXLoRA] ✓ Loaded 3 adapters
+[OmniXLoRA] Loaded albedo: 456 weights
+[OmniXLoRA] Loaded 3 adapters
 
 [OmniXPerception] Running distance perception
 [OmniXPerception] Steps: 5, Guidance: 3.5, Noise: 0.1
 [OmniXPerception] Input tensor shape: torch.Size([1, 3, 1024, 2048])
 [OmniXPerception] Active adapter: distance
 [OmniXPerception] Encoded to latents: torch.Size([1, 16, 128, 256])
-[OmniXPerception] ✓ Inference complete
+[OmniXPerception] Inference complete
 ```
 
 4. **Check Output**:
@@ -128,16 +127,12 @@ Once confirmed working:
 
 ## Troubleshooting
 
-### "Model not found" or Download Fails
-**Issue**: Can't download FLUX.1-dev
+### "Model not found"
+**Issue**: Flux files missing from `C:/ComfyUI/models/diffusers/`
 **Solutions**:
-- Check internet connection
-- Ensure ~35GB free disk space
-- Try again (downloads resume)
-- Or download manually:
-  ```bash
-  huggingface-cli download black-forest-labs/FLUX.1-dev
-  ```
+- Verify the entire Diffusers tree from `black-forest-labs/FLUX.1-dev` exists: `model_index.json`, `flux1-dev.safetensors`, and the subfolders `scheduler/`, `transformer/`, `text_encoder/`, `text_encoder_2/`, `tokenizer/`, `tokenizer_2/`, `vae/` (with their configs).
+- Restart ComfyUI after copying the files so the loader refreshes its dropdown.
+- Update the `local_checkpoint` setting if you saved the weights under a different name.
 
 ### "Weights only load failed" Error
 **Issue**: PyTorch 2.6+ security policy preventing loading of `.sft` or `.ckpt` files

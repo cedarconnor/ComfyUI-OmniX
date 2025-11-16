@@ -11,7 +11,7 @@
 When attempting to load local Flux model files (`.sft`, `.ckpt`) using `FluxDiffusersLoader`, users encountered this error:
 
 ```
-OSError: Unable to load weights from checkpoint file for 'C:\ComfyUI\models\unet\flux1-dev.sft'
+OSError: Unable to load weights from checkpoint file for 'C:\\ComfyUI\\models\\diffusers\flux1-dev.sft'
 _pickle.UnpicklingError: Weights only load failed. In PyTorch 2.6, we changed the default
 value of the `weights_only` argument in `torch.load` from `False` to `True`.
 ```
@@ -101,7 +101,7 @@ This approach is safe because:
 When the fix activates, users will see:
 
 ```
-[FluxDiffusers] Loading Flux from local file: C:\ComfyUI\models\unet\flux1-dev.sft
+[FluxDiffusers] Loading Flux from local file: C:\\ComfyUI\\models\\diffusers\flux1-dev.sft
 [FluxDiffusers] Device: cuda:0, dtype: torch.bfloat16
 [FluxDiffusers] Standard loading failed due to PyTorch 2.6+ security policy
 [FluxDiffusers] Attempting alternative loading method...
@@ -152,7 +152,7 @@ When the fix activates, users will see:
 ## Testing
 
 ### Test Case 1: Local .sft File
-**Input**: `flux1-dev.sft` from `C:\ComfyUI\models\unet\`
+**Input**: `flux1-dev.sft` from `C:\\ComfyUI\\models\\diffusers\`
 **Expected**: Successful loading with alternative method message
 **Status**: ✅ Ready to test
 

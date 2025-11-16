@@ -294,18 +294,6 @@ class OmniXLoRALoader:
             logger.warning("No adapters selected")
             return flux_pipeline, {}
 
-        # Clear previously loaded adapters so we can re-use adapter names safely
-        if hasattr(flux_pipeline, "delete_adapters"):
-            try:
-                flux_pipeline.delete_adapters()
-            except Exception as exc:
-                logger.debug("delete_adapters failed: %s", exc)
-        elif hasattr(flux_pipeline, "unload_lora_weights"):
-            try:
-                flux_pipeline.unload_lora_weights()
-            except Exception as exc:
-                logger.debug("unload_lora_weights failed: %s", exc)
-
         loaded: Dict[str, Dict[str, torch.Tensor]] = {}
         adapter_names: List[str] = []
         adapter_scales: List[float] = []
@@ -351,43 +339,10 @@ class OmniXPerceptionDiffusers:
                 "flux_pipeline": ("FLUX_PIPELINE",),
                 "loaded_adapters": ("OMNIX_ADAPTERS",),
                 "panorama": ("IMAGE",),
-                "task": (
-                    ["distance", "normal", "albedo", "pbr"],
-                    {
-                        "default": "distance",
-                        "tooltip": "Which perception head to run: distance (depth), normal, albedo, or pbr (roughness/metallic).",
-                    },
-                ),
-                "num_steps": (
-                    "INT",
-                    {
-                        "default": 28,
-                        "min": 1,
-                        "max": 80,
-                        "step": 1,
-                        "tooltip": "Diffusion steps. 20-32 is typical for perception; higher values are slower but reduce noise.",
-                    },
-                ),
-                "guidance_scale": (
-                    "FLOAT",
-                    {
-                        "default": 3.5,
-                        "min": 1.0,
-                        "max": 20.0,
-                        "step": 0.5,
-                        "tooltip": "Classifier-free guidance. 2.5-4.0 keeps perception stable; >8 behaves more like text-to-image.",
-                    },
-                ),
-                "noise_strength": (
-                    "FLOAT",
-                    {
-                        "default": 0.3,
-                        "min": 0.05,
-                        "max": 1.0,
-                        "step": 0.05,
-                        "tooltip": "Img2img strength: 0.1-0.3 preserves the panorama; 0.5+ introduces hallucinated structure.",
-                    },
-                ),
+                "task": (["distance", "normal", "albedo", "pbr"], {"default": "distance"}),
+                "num_steps": ("INT", {"default": 28, "min": 1, "max": 80, "step": 1}),
+                "guidance_scale": ("FLOAT", {"default": 3.5, "min": 1.0, "max": 20.0, "step": 0.5}),
+                "noise_strength": ("FLOAT", {"default": 0.3, "min": 0.05, "max": 1.0, "step": 0.05}),
             }
         }
 
@@ -408,10 +363,7 @@ class OmniXPerceptionDiffusers:
         image_tensor = self._image_to_tensor(panorama, flux_pipeline)
         with torch.no_grad():
             latents = flux_pipeline.vae.encode(image_tensor).latent_dist.sample()
-        vae_config = flux_pipeline.vae.config
-        shift = getattr(vae_config, "shift_factor", 0.0)
-        scale = getattr(vae_config, "scaling_factor", 1.0)
-        latents = (latents - shift) * scale
+        latents = latents * flux_pipeline.vae.config.scaling_factor
 
         vae_scale = getattr(flux_pipeline, "vae_scale_factor", 8)
         image_height = panorama.shape[1]
@@ -421,25 +373,29 @@ class OmniXPerceptionDiffusers:
         image_height = latent_height * vae_scale
         image_width = latent_width * vae_scale
 
-        image_latents = latents.to(device=flux_pipeline.device, dtype=flux_pipeline.dtype)
+        num_channels_latents = flux_pipeline.transformer.config.in_channels // 4
+        packed = flux_pipeline._pack_latents(
+            latents.to(device=flux_pipeline.device, dtype=flux_pipeline.dtype),
+            batch_size=1,
+            num_channels_latents=num_channels_latents,
+            height=latent_height,
+            width=latent_width,
+        )
         latent_image_ids = flux_pipeline._prepare_latent_image_ids(
             1, latent_height // 2, latent_width // 2, flux_pipeline.device, flux_pipeline.dtype
         )
-        return image_latents, latent_image_ids, latent_height, latent_width, image_height, image_width
+        return packed, latent_image_ids, latent_height, latent_width, image_height, image_width
 
     def _prepare_schedule(
         self,
         flux_pipeline: FluxPipeline,
-        image_latents: torch.Tensor,
-        latent_height: int,
-        latent_width: int,
+        packed_latents: torch.Tensor,
         num_steps: int,
         noise_strength: float,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         scheduler = flux_pipeline.scheduler
         device = flux_pipeline.device
-        num_channels_latents = flux_pipeline.transformer.config.in_channels // 4
-        image_seq_len = (latent_height // 2) * (latent_width // 2)
+        image_seq_len = packed_latents.shape[1]
 
         mu = calculate_shift(
             image_seq_len,
@@ -448,13 +404,14 @@ class OmniXPerceptionDiffusers:
             scheduler.config.get("base_shift", 0.5),
             scheduler.config.get("max_shift", 1.15),
         )
-        scheduler.set_timesteps(num_steps, device=device, mu=mu)
+        base_sigmas = np.linspace(1.0, 1.0 / num_steps, num_steps)
+        scheduler.set_timesteps(num_steps, device=device, sigmas=base_sigmas, mu=mu)
         timesteps = scheduler.timesteps
         order = getattr(scheduler, "order", 1)
 
         strength = float(np.clip(noise_strength, 0.05, 0.99))
-        init_timestep = min(num_steps * strength, num_steps)
-        t_start = int(max(num_steps - init_timestep, 0))
+        init_timestep = max(1, min(int(num_steps * strength), num_steps))
+        t_start = max(num_steps - init_timestep, 0)
         start_index = min(t_start * order, len(timesteps) - 1)
         trimmed_timesteps = timesteps[start_index:]
         if trimmed_timesteps.numel() == 0:
@@ -464,34 +421,9 @@ class OmniXPerceptionDiffusers:
         if hasattr(scheduler, "set_begin_index"):
             scheduler.set_begin_index(start_index)
 
-        noise = randn_tensor(image_latents.shape, device=device, dtype=image_latents.dtype)
-        timestep_tensor = trimmed_timesteps[:1].to(device=device)
-
-        if hasattr(scheduler, "scale_noise"):
-            latents = scheduler.scale_noise(
-                image_latents,
-                timestep_tensor,
-                noise=noise,
-            )
-        elif hasattr(scheduler, "sigmas"):
-            sigma = scheduler.sigmas[start_index]
-            if not torch.is_tensor(sigma):
-                sigma = torch.tensor(sigma, device=device, dtype=image_latents.dtype)
-            while len(sigma.shape) < len(image_latents.shape):
-                sigma = sigma.unsqueeze(-1)
-            latents = sigma * noise + (1.0 - sigma) * image_latents
-        else:
-            latents = image_latents + noise * noise_strength
-
-        packed_latents = flux_pipeline._pack_latents(
-            latents.to(device=flux_pipeline.device, dtype=flux_pipeline.dtype),
-            batch_size=image_latents.shape[0],
-            num_channels_latents=num_channels_latents,
-            height=latent_height,
-            width=latent_width,
-        )
-
-        return packed_latents, trimmed_timesteps
+        noise = randn_tensor(packed_latents.shape, device=device, dtype=packed_latents.dtype)
+        latents = packed_latents + noise * noise_strength
+        return latents, trimmed_timesteps
 
     def run_perception(
         self,
@@ -510,7 +442,7 @@ class OmniXPerceptionDiffusers:
         logger.info(f"Running perception - Task={task}, steps={num_steps}, noise={noise_strength}")
 
         (
-            image_latents,
+            packed_latents,
             latent_image_ids,
             latent_height,
             latent_width,
@@ -519,9 +451,7 @@ class OmniXPerceptionDiffusers:
         ) = self._encode_latents(flux_pipeline, panorama)
         latents, timesteps = self._prepare_schedule(
             flux_pipeline,
-            image_latents,
-            latent_height,
-            latent_width,
+            packed_latents,
             num_steps=num_steps,
             noise_strength=noise_strength,
         )

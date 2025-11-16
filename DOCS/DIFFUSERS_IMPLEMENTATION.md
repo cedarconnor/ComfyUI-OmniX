@@ -37,17 +37,17 @@ The architectural differences were too deep for simple weight conversion.
 
 ---
 
-## Solution: HuggingFace Diffusers Integration
+## Solution: Diffusers Integration
 
-Instead of converting weights, we now use HuggingFace Diffusers' Flux implementation directly, which matches the OmniX adapter format perfectly.
+Instead of converting weights, we now use the Diffusers Flux implementation directly, which matches the OmniX adapter format perfectly and can be run entirely from manually provided files.
 
 ### Key Advantages
 
 ✅ **Perfect Compatibility** - No weight conversion needed
 ✅ **Official Implementation** - Uses same Flux as OmniX paper
 ✅ **LoRA Support** - Built-in via Diffusers' PEFT integration
-✅ **Well-Tested** - Proven architecture from HuggingFace
-✅ **Future-Proof** - Updates from Diffusers library
+✅ **Well-Tested** - Proven architecture from the Diffusers project
+✅ **Future-Proof** - Updates from the Diffusers library
 
 ---
 
@@ -55,12 +55,11 @@ Instead of converting weights, we now use HuggingFace Diffusers' Flux implementa
 
 ### 1. `FluxDiffusersLoader`
 
-Loads Flux model from HuggingFace using Diffusers pipeline.
+Loads the Flux model directly from the manually downloaded files stored in `ComfyUI/models/diffusers/`.
 
 **Inputs**:
-- `model_id`: HuggingFace model ID (default: "black-forest-labs/FLUX.1-dev")
 - `torch_dtype`: bfloat16, float16, or float32
-- `local_files_only`: Use cached model only
+- `local_checkpoint`: Optional override if you keep multiple `.safetensors`/`.sft` files
 
 **Outputs**:
 - `flux_pipeline`: Complete Flux pipeline
@@ -68,10 +67,7 @@ Loads Flux model from HuggingFace using Diffusers pipeline.
 - `text_encoder`: CLIP text encoder
 
 **Example**:
-```python
-model_id = "black-forest-labs/FLUX.1-dev"
-dtype = "bfloat16"
-```
+The loader automatically locates `flux1-dev.safetensors`, `model_index.json`, and the required Diffusers config subfolders (`scheduler/`, `transformer/`, `text_encoder/`, `text_encoder_2/`, `tokenizer/`, `tokenizer_2/`, `vae/`) inside the `models/diffusers` directory and never attempts a network download.
 
 ---
 
@@ -131,7 +127,7 @@ Run OmniX perception using Diffusers-based Flux pipeline.
 ```
 Input Panorama (IMAGE)
     ↓
-[FluxDiffusersLoader] → Load Flux from HuggingFace
+[FluxDiffusersLoader] → Load Flux from local files
     ↓
 [OmniXLoRALoader] → Load & inject OmniX adapters
     ↓
@@ -178,10 +174,10 @@ Both FluxPipeline and PEFT are available.
 
 ### Setup
 
-1. **Download Flux Model**:
-   - First run will download FLUX.1-dev from HuggingFace (~30GB)
-   - Cached in ComfyUI temp directory
-   - Or download locally: `huggingface-cli download black-forest-labs/FLUX.1-dev`
+1. **Prepare Flux Files**:
+   - Copy `flux1-dev.safetensors` plus the entire Diffusers config tree from `black-forest-labs/FLUX.1-dev` (`scheduler/`, `transformer/`, `text_encoder/`, `text_encoder_2/`, `tokenizer/`, `tokenizer_2/`, `vae/`, and their JSON/tokenizer files) into `C:/ComfyUI/models/diffusers/`
+   - Optional: keep `flux1-dev.sft` alongside for backward compatibility
+   - No HuggingFace downloads occur at runtime once these files are present
 
 2. **Ensure OmniX Adapters**:
    - Located at: `C:/ComfyUI/models/loras/omnix/`
@@ -199,8 +195,8 @@ Both FluxPipeline and PEFT are available.
 
 1. **Load Flux**:
    - Add `FluxDiffusersLoader` node
-   - Set `model_id`: "black-forest-labs/FLUX.1-dev"
    - Set `torch_dtype`: "bfloat16" (recommended)
+   - (Optional) choose a specific local checkpoint filename from the dropdown
 
 2. **Load Adapters**:
    - Add `OmniXLoRALoader` node
@@ -427,7 +423,7 @@ This is completely safe for your trusted local Flux model files (`.sft`, `.ckpt`
 
 ## Conclusion
 
-The Diffusers-based approach provides a clean, maintainable solution for OmniX perception in ComfyUI. By leveraging HuggingFace's official Flux implementation, we avoid all weight conversion issues and ensure perfect compatibility with OmniX adapters.
+The Diffusers-based approach provides a clean, maintainable solution for OmniX perception in ComfyUI. By leveraging the official Flux implementation locally, we avoid all weight conversion issues and ensure perfect compatibility with OmniX adapters while remaining fully offline.
 
 **Status**: Ready for testing!
 **Confidence**: 85% - Should work out of the box
