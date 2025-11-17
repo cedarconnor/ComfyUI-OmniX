@@ -143,6 +143,9 @@ def inject_cross_lora_into_model(
     # Flux structure: double_blocks[i].img_attn, single_blocks[i].linear1/linear2
     patched_count = 0
 
+    # Track failed adapter loads
+    failed_loads = []
+
     # Target double_blocks - these have img_attn modules
     if hasattr(transformer, 'double_blocks'):
         logger.debug(f"Found {len(transformer.double_blocks)} double_blocks")
@@ -171,7 +174,9 @@ def inject_cross_lora_into_model(
                                     cross_lora.load_adapter_weights(adapter_name, converted_weights[adapter_name][layer_key])
                                     logger.debug(f"Loaded weights for {adapter_name} in layer {layer_key}")
                                 except Exception as e:
-                                    logger.warning(f"Failed to load {adapter_name} weights for {layer_key}: {e}")
+                                    error_msg = f"Failed to load {adapter_name} weights for {layer_key}: {e}"
+                                    logger.error(error_msg)
+                                    failed_loads.append((adapter_name, layer_key, str(e)))
 
                         # Replace layer
                         setattr(img_attn, attn_name, cross_lora.to(device))
@@ -204,13 +209,24 @@ def inject_cross_lora_into_model(
                                     if i == 0:  # Only log for first block to reduce verbosity
                                         logger.debug(f"Loaded weights for {adapter_name} in single_blocks")
                                 except Exception as e:
-                                    logger.warning(f"Failed to load {adapter_name} weights for {layer_key}: {e}")
+                                    error_msg = f"Failed to load {adapter_name} weights for {layer_key}: {e}"
+                                    logger.error(error_msg)
+                                    failed_loads.append((adapter_name, layer_key, str(e)))
 
                         # Replace layer
                         setattr(block, linear_name, cross_lora.to(device))
                         patched_count += 1
 
     logger.info(f"Patched {patched_count} layers with adapters")
+
+    # Warn if there were significant failures
+    if failed_loads:
+        unique_adapters = set(adapter_name for adapter_name, _, _ in failed_loads)
+        logger.warning(
+            f"Failed to load weights for {len(failed_loads)} layers across {len(unique_adapters)} adapters. "
+            f"Affected adapters: {', '.join(unique_adapters)}. "
+            "Some layers will use randomly initialized weights which may degrade quality."
+        )
 
     return model
 

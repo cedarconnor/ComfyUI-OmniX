@@ -8,8 +8,11 @@ Outputs: distance (depth), normals, albedo, roughness, metallic maps.
 import torch
 import torch.nn as nn
 from typing import Dict, List, Optional
+import logging
 from .adapters import OmniXAdapters, AdapterModule
 from .utils import from_comfyui_image, to_comfyui_image
+
+logger = logging.getLogger(__name__)
 
 
 class DecoderHead(nn.Module):
@@ -62,7 +65,7 @@ class DecoderHead(nn.Module):
                 mode='bilinear',
                 align_corners=False
             )
-            print(f"[DecoderHead] Input: {input_shape} → Decoded: {decoded_shape} → Upsampled: {x.shape} (target: {target_size})")
+            logger.debug(f"Input: {input_shape} → Decoded: {decoded_shape} → Upsampled: {x.shape} (target: {target_size})")
         elif self.upsample_factor > 1:
             x = torch.nn.functional.interpolate(
                 x,
@@ -70,9 +73,9 @@ class DecoderHead(nn.Module):
                 mode='bilinear',
                 align_corners=False
             )
-            print(f"[DecoderHead] Input: {input_shape} → Decoded: {decoded_shape} → Upsampled: {x.shape} (factor: {self.upsample_factor})")
+            logger.debug(f"Input: {input_shape} → Decoded: {decoded_shape} → Upsampled: {x.shape} (factor: {self.upsample_factor})")
         else:
-            print(f"[DecoderHead] Input: {input_shape} → Decoded: {decoded_shape} → No upsampling")
+            logger.debug(f"Input: {input_shape} → Decoded: {decoded_shape} → No upsampling")
 
         return x
 
@@ -302,38 +305,38 @@ class OmniXPerceiver:
         batch_size, orig_height, orig_width, channels = panorama.shape
         target_size = (orig_height, orig_width)
 
-        print(f"[OmniX Perceiver] Input panorama shape: {panorama.shape}")
-        print(f"[OmniX Perceiver] Target output size: {target_size}")
+        logger.info(f"Input panorama shape: {panorama.shape}")
+        logger.debug(f"Target output size: {target_size}")
 
         # Encode panorama once (shared features)
         with torch.no_grad():
             features = self.encoder(panorama)
-            print(f"[OmniX Perceiver] Encoded features shape: {features.shape}")
+            logger.debug(f"Encoded features shape: {features.shape}")
 
         # Run requested adapters
         for mode in extract_modes:
             if mode == "distance":
                 result = self._extract_distance(features, target_size)
-                print(f"[OmniX Perceiver] Distance output shape: {result.shape}")
+                logger.debug(f"Distance output shape: {result.shape}")
                 results["distance"] = result
             elif mode == "normal":
                 result = self._extract_normal(features, target_size)
-                print(f"[OmniX Perceiver] Normal output shape: {result.shape}")
+                logger.debug(f"Normal output shape: {result.shape}")
                 results["normal"] = result
             elif mode == "albedo":
                 result = self._extract_albedo(features, target_size)
-                print(f"[OmniX Perceiver] Albedo output shape: {result.shape}")
+                logger.debug(f"Albedo output shape: {result.shape}")
                 results["albedo"] = result
             elif mode == "roughness":
                 result = self._extract_roughness(features, target_size)
-                print(f"[OmniX Perceiver] Roughness output shape: {result.shape}")
+                logger.debug(f"Roughness output shape: {result.shape}")
                 results["roughness"] = result
             elif mode == "metallic":
                 result = self._extract_metallic(features, target_size)
-                print(f"[OmniX Perceiver] Metallic output shape: {result.shape}")
+                logger.debug(f"Metallic output shape: {result.shape}")
                 results["metallic"] = result
             else:
-                print(f"Warning: Unknown perception mode '{mode}', skipping")
+                logger.warning(f"Unknown perception mode '{mode}', skipping")
 
         return results
 
@@ -527,9 +530,18 @@ class OmniXPerceiver:
             distance = distance.to(torch.float32)
 
         # Remove outliers (clip to percentiles)
+        # Use sampling for large tensors to avoid memory spikes
         distance_flat = distance.flatten()
-        p1 = torch.quantile(distance_flat, 0.01)
-        p99 = torch.quantile(distance_flat, 0.99)
+        sample_size = 50000
+
+        if distance_flat.numel() > sample_size:
+            indices = torch.randperm(distance_flat.numel(), device=distance_flat.device)[:sample_size]
+            sampled = distance_flat[indices]
+            p1 = torch.quantile(sampled, 0.01)
+            p99 = torch.quantile(sampled, 0.99)
+        else:
+            p1 = torch.quantile(distance_flat, 0.01)
+            p99 = torch.quantile(distance_flat, 0.99)
 
         distance = torch.clamp(distance, p1, p99)
 

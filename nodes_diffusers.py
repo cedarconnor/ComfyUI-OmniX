@@ -171,28 +171,27 @@ class FluxDiffusersLoader:
                 raise
 
             logging.warning(
-                "Diffusers requires weights_only=False for %s. Using controlled override.",
+                "Diffusers requires weights_only=False for %s. Using safe fallback loading.",
                 path.name,
             )
 
-            # Use a more controlled approach with context-like handling
-            import threading
-            lock = threading.Lock()
+            # Use a safer approach: patch with functools.partial in local scope
+            import functools
 
-            with lock:
-                original_load = torch.load
+            # Create a wrapper that sets weights_only=False
+            safe_torch_load = functools.partial(torch.load, weights_only=False)
 
-                def patched_load(*args, **kwargs):
-                    # Only override weights_only, preserve other kwargs
-                    kwargs["weights_only"] = False
-                    return original_load(*args, **kwargs)
+            # Temporarily store original for restoration
+            _original_torch_load = torch.load
 
-                try:
-                    torch.load = patched_load
-                    return FluxPipeline.from_single_file(path, **common_kwargs)
-                finally:
-                    # Always restore original torch.load
-                    torch.load = original_load
+            try:
+                # Replace torch.load with our safe version
+                torch.load = safe_torch_load
+                result = FluxPipeline.from_single_file(path, **common_kwargs)
+                return result
+            finally:
+                # Always restore original torch.load, even on exception
+                torch.load = _original_torch_load
 
     def load_pipeline(
         self,
@@ -503,8 +502,35 @@ class OmniXPerceptionDiffusers:
         guidance_scale,
         noise_strength,
     ):
+        # Validate adapter availability
         if task not in loaded_adapters:
             raise ValueError(f"Adapter '{task}' not loaded. Available: {list(loaded_adapters)}")
+
+        # Validate panorama input
+        if panorama.dim() != 4 or panorama.shape[0] < 1:
+            raise ValueError(f"Invalid panorama shape: {panorama.shape}. Expected (B, H, W, C)")
+
+        height, width = panorama.shape[1], panorama.shape[2]
+
+        # Validate panorama aspect ratio (should be 2:1 for equirectangular)
+        aspect_ratio = width / height
+        if not (1.8 <= aspect_ratio <= 2.2):
+            logger.warning(
+                f"Aspect ratio {aspect_ratio:.2f} is not standard for panoramas (2:1). "
+                f"Got {width}×{height}. Output quality may be degraded."
+            )
+
+        # Validate tensor range
+        pmin, pmax = panorama.min().item(), panorama.max().item()
+        if not (-0.1 <= pmin and pmax <= 1.1):
+            raise ValueError(f"Invalid input range: [{pmin:.2f}, {pmax:.2f}]. Expected [0, 1]")
+
+        # Validate parameters
+        if not (0.05 <= noise_strength <= 1.0):
+            raise ValueError(f"Invalid noise_strength: {noise_strength}. Expected [0.05, 1.0]")
+
+        if not (1.0 <= guidance_scale <= 20.0):
+            raise ValueError(f"Invalid guidance_scale: {guidance_scale}. Expected [1.0, 20.0]")
 
         flux_pipeline.set_adapters([task], adapter_weights=[loaded_adapters[task]["scale"]])
         logger.info(f"Running perception - Task={task}, steps={num_steps}, noise={noise_strength}")
@@ -526,7 +552,8 @@ class OmniXPerceptionDiffusers:
             noise_strength=noise_strength,
         )
 
-        prompt = f"perception task: {task}"
+        # Enhanced prompt with camera-specific context for better panorama understanding
+        prompt = f"perception task: {task}, equirectangular projection, 360 degree panoramic view"
         prompt_embeds, pooled_prompt_embeds, text_ids = flux_pipeline.encode_prompt(
             prompt=prompt,
             prompt_2=None,

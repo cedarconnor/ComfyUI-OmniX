@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 from typing import Optional, Dict, Any, List, Tuple
 import numpy as np
+import logging
 
 from .model_loader import OmniXModelLoader
 
@@ -17,6 +18,8 @@ from .model_loader import OmniXModelLoader
 import comfy.sample
 import comfy.samplers
 import comfy.model_management as mm
+
+logger = logging.getLogger(__name__)
 
 
 class OmniXPanoramaGenerator:
@@ -52,7 +55,7 @@ class OmniXPanoramaGenerator:
         prompt: str,
         negative_prompt: str = "",
         seed: int = -1,
-        steps: int = 20,
+        steps: int = 28,  # Match original OmniX default
         cfg: float = 3.5,
         sampler_name: str = "euler",
         scheduler: str = "simple",
@@ -90,16 +93,16 @@ class OmniXPanoramaGenerator:
         if torch.cuda.is_available():
             torch.cuda.manual_seed(seed)
 
-        print(f"Generating panorama...")
-        print(f"  Prompt: {prompt}")
-        print(f"  Size: {width}x{height}")
-        print(f"  Steps: {steps}, CFG: {cfg}")
-        print(f"  Seed: {seed}")
+        logger.info(f"Generating panorama...")
+        logger.info(f"  Prompt: {prompt}")
+        logger.info(f"  Size: {width}x{height}")
+        logger.info(f"  Steps: {steps}, CFG: {cfg}")
+        logger.info(f"  Seed: {seed}")
 
         # Validate aspect ratio (panoramas should be 2:1)
         aspect_ratio = width / height
         if not (1.8 <= aspect_ratio <= 2.2):
-            print(f"⚠️  Warning: Aspect ratio {aspect_ratio:.2f} is not standard for panoramas (2:1)")
+            logger.warning(f"Aspect ratio {aspect_ratio:.2f} is not standard for panoramas (2:1)")
 
         # Encode text prompt
         if self.clip is None:
@@ -135,7 +138,7 @@ class OmniXPanoramaGenerator:
 
         # If conditioning image is provided, encode it
         if conditioning_image is not None:
-            print(f"  Using image conditioning (strength: {conditioning_strength:.2f})")
+            logger.info(f"  Using image conditioning (strength: {conditioning_strength:.2f})")
 
             # conditioning_image is already a tensor in ComfyUI format (B, H, W, C)
             # Convert to (B, C, H, W) for processing
@@ -166,7 +169,7 @@ class OmniXPanoramaGenerator:
         latent_image = {"samples": latent}
 
         # Run sampling
-        print("  Running diffusion sampling...")
+        logger.info("  Running diffusion sampling...")
 
         samples = comfy.sample.sample(
             model=self.model,
@@ -183,7 +186,7 @@ class OmniXPanoramaGenerator:
         )
 
         # Decode latent to image
-        print("  Decoding latent to image...")
+        logger.info("  Decoding latent to image...")
 
         with torch.no_grad():
             decoded = self.vae.decode(samples)
@@ -195,7 +198,7 @@ class OmniXPanoramaGenerator:
         else:
             output = decoded
 
-        print(f"✓ Generated panorama: {output.shape}")
+        logger.info(f"✓ Generated panorama: {output.shape}")
 
         return output
 
@@ -217,7 +220,7 @@ class OmniXPanoramaGenerator:
         results = []
 
         for i, prompt in enumerate(prompts):
-            print(f"\n[{i+1}/{len(prompts)}] Generating panorama for: {prompt}")
+            logger.info(f"\n[{i+1}/{len(prompts)}] Generating panorama for: {prompt}")
 
             # Generate single panorama
             panorama = self.generate(prompt=prompt, **kwargs)
@@ -227,7 +230,7 @@ class OmniXPanoramaGenerator:
         # Stack into batch
         batch = torch.cat(results, dim=0)
 
-        print(f"\n✓ Generated {len(prompts)} panoramas")
+        logger.info(f"\n✓ Generated {len(prompts)} panoramas")
 
         return batch
 
@@ -318,6 +321,6 @@ def create_generator(
     # Create generator
     generator = OmniXPanoramaGenerator(model_loader)
 
-    print("✓ OmniX panorama generator ready")
+    logger.info("✓ OmniX panorama generator ready")
 
     return generator

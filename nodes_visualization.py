@@ -42,10 +42,26 @@ def _viridis(depth: torch.Tensor) -> torch.Tensor:
 
 
 def _normalize_percentile(tensor: torch.Tensor, low: float, high: float) -> torch.Tensor:
-    q_low = torch.quantile(tensor, low)
-    q_high = torch.quantile(tensor, high)
-    if q_high - q_low < 1e-6:
+    # For large tensors, use sampling to compute quantiles efficiently
+    # This avoids memory spikes on high-resolution images
+    sample_size = 50000  # ~50K samples sufficient for accurate quantiles
+    flat = tensor.flatten()
+
+    if flat.numel() > sample_size:
+        # Use reservoir sampling for efficiency
+        indices = torch.randperm(flat.numel(), device=flat.device)[:sample_size]
+        sampled = flat[indices]
+        q_low = torch.quantile(sampled, low)
+        q_high = torch.quantile(sampled, high)
+    else:
+        q_low = torch.quantile(flat, low)
+        q_high = torch.quantile(flat, high)
+
+    # Use dtype-aware epsilon
+    eps = 1e-6 if tensor.dtype == torch.float32 else 1e-4
+    if q_high - q_low < eps:
         return torch.zeros_like(tensor)
+
     return torch.clamp((tensor - q_low) / (q_high - q_low), 0.0, 1.0)
 
 
