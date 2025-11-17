@@ -191,8 +191,8 @@ ComfyUI/
 | Node | Purpose | Key Inputs | Output |
 |------|---------|------------|--------|
 | **FluxDiffusersLoader** | Loads `FluxPipeline` strictly from local files. | `torch_dtype` (bf16/fp16/fp32), `local_checkpoint` (filename). | Pipeline, VAE, text encoder. |
-| **OmniXLoRALoader** | Injects OmniX LoRA adapters into the pipeline. | `adapter_dir`, booleans for distance/normal/albedo/pbr, `lora_scale`. | Patched pipeline + metadata dict. |
-| **OmniXPerceptionDiffusers** | Runs one perception head using the patched pipeline. | `flux_pipeline`, `loaded_adapters`, panorama `IMAGE`, `task`, `num_steps`, `guidance_scale`, `noise_strength`. | Single perception map (`IMAGE`). |
+| **OmniXLoRALoader** | Injects OmniX LoRA adapters into the pipeline. | `adapter_dir`, booleans for distance/normal/albedo/pbr, `lora_scale` (default: 1.0). | Patched pipeline + metadata dict. |
+| **OmniXPerceptionDiffusers** | Runs one perception head using the patched pipeline. | `flux_pipeline`, `loaded_adapters`, panorama `IMAGE`, `task`, `num_steps`, `guidance_scale`, `noise_strength`, `prompt_mode` (default: "task_name"). | Single perception map (`IMAGE`). |
 | **Visualization nodes** | Post-process raw tensors. | Depth / Normal / Albedo / PBR specific parameters (gamma, percentiles, etc.). | Display-ready `IMAGE`. |
 
 Typical workflow: `LoadImage → FluxDiffusersLoader → OmniXLoRALoader → OmniXPerceptionDiffusers (duplicated per head) → Visualization → SaveImage/Preview`.
@@ -212,6 +212,12 @@ Typical workflow: `LoadImage → FluxDiffusersLoader → OmniXLoRALoader → Omn
 
 > **Important Notes:**
 > - **Default `num_steps` is now 28** to match the original OmniX implementation (previously 20)
+> - **`lora_scale` should be 1.0** for best results (avoid values > 1.2 unless experimenting)
+> - **`prompt_mode` options:**
+>   - `"empty"`: No prompt (unconditional generation) - try this first if outputs look wrong
+>   - `"task_name"`: Simple task name like "distance" or "normal" (default, recommended)
+>   - `"minimal"`: Short descriptor like "perception: distance"
+>   - `"descriptive"`: Full panoramic description (may reduce quality for some adapters)
 > - `noise_strength` behaves like Diffusers img2img "strength":
 >   - **Below 0.1**: Output too similar to input, minimal perception
 >   - **0.15–0.40**: Optimal range for perception tasks (recommended)
@@ -275,21 +281,31 @@ Typical workflow: `LoadImage → FluxDiffusersLoader → OmniXLoRALoader → Omn
 | `Adapter name ... already in use` | **FIXED** in latest version. OmniXLoRALoader now automatically detects and clears existing adapters. Simply re-queue the workflow. If you still see this error, update to the latest version. |
 | Output looks identical to input | `noise_strength` too low (below 0.1). Increase to **0.20–0.35** for proper perception. |
 | Outputs look completely hallucinated | `noise_strength` too high (≥0.5). Drop to **0.20–0.35** for perception tasks. |
-| Poor quality / noisy outputs | 1) Ensure `num_steps=28` (default changed from 20)<br>2) Use recommended `guidance_scale` per task (see table above)<br>3) Verify you're using **bfloat16** dtype<br>4) Check aspect ratio is exactly 2:1 |
+| **Outputs have wrong colors/patterns (e.g., saturated normals)** | **⚠️ MOST COMMON ISSUE**: 1) Set `prompt_mode="empty"` or `"task_name"` (not "descriptive")<br>2) Reduce `lora_scale` to **1.0** (not 1.3+)<br>3) See [OUTPUT_QUALITY_INVESTIGATION.md](OUTPUT_QUALITY_INVESTIGATION.md) for detailed diagnosis |
+| Poor quality / noisy outputs | 1) Ensure `num_steps=28` (default changed from 20)<br>2) Use recommended `guidance_scale` per task (see table above)<br>3) Verify you're using **bfloat16** dtype<br>4) Check aspect ratio is exactly 2:1<br>5) Try `prompt_mode="task_name"` or `"empty"` |
 | Diffusers missing files | Verify directory tree matches Diffusers layout: `scheduler/`, `transformer/`, `text_encoder/`, `text_encoder_2/`, `tokenizer/`, `tokenizer_2/`, `vae/` folders must exist with `config.json` files. Also need `model_index.json` in root. |
 | CUDA out of memory | 1) Reduce image resolution (try 512×256 instead of 2048×1024)<br>2) Close other GPU applications<br>3) Use `torch_dtype="float16"` instead of bfloat16 (slightly faster but lower quality) |
 | Aspect ratio warning | Your input image is not 2:1 ratio. Resize to 1024×512, 2048×1024, or other 2:1 dimensions for best results. |
 
-### Recent Improvements (v1.2)
+### Recent Improvements
 
-✅ **Fixed critical LoRA weight averaging bug** - Significantly improved output quality (v1.1)
-✅ **Fixed "adapter already in use" error** - Automatic adapter clearing when re-queueing workflows (v1.2)
-✅ **Updated default steps to 28** - Matches original OmniX implementation (v1.1)
-✅ **Added comprehensive input validation** - Clear error messages for common mistakes (v1.1)
-✅ **Optimized performance** - 50-70% faster on high-resolution images (v1.1)
-✅ **Improved logging** - Better debugging and error messages (v1.1)
+**v1.3 (Latest) - Output Quality Investigation & Fixes**
+✅ **Added `prompt_mode` parameter** - Control prompt format (empty/task_name/minimal/descriptive) to fix quality issues
+✅ **Added comprehensive debug logging** - Verify adapter loading and PEFT integration status
+✅ **Created OUTPUT_QUALITY_INVESTIGATION.md** - Detailed diagnosis of quality issues and fixes
+✅ **Updated README troubleshooting** - Added guidance for most common quality issues
 
-See `QUALITY_REVIEW_FINDINGS.md` and `IMPLEMENTATION_SUMMARY.md` for detailed technical information about the improvements.
+**v1.2 - Adapter Loading Fixes**
+✅ **Fixed "adapter already in use" error** - Automatic adapter clearing when re-queueing workflows
+✅ **Improved logging** - Better debugging and error messages
+
+**v1.1 - Quality & Performance**
+✅ **Fixed critical LoRA weight averaging bug** - Significantly improved output quality
+✅ **Updated default steps to 28** - Matches original OmniX implementation
+✅ **Added comprehensive input validation** - Clear error messages for common mistakes
+✅ **Optimized performance** - 50-70% faster on high-resolution images
+
+See `QUALITY_REVIEW_FINDINGS.md`, `IMPLEMENTATION_SUMMARY.md`, and `OUTPUT_QUALITY_INVESTIGATION.md` for detailed technical information.
 
 ---
 

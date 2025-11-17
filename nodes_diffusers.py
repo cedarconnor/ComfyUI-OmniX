@@ -357,6 +357,14 @@ class OmniXLoRALoader:
             logger.info(f"Loading {adapter_name} from {adapter_path}")
             state = load_file(str(adapter_path))
 
+            # Debug: Log adapter weight structure
+            logger.debug(f"Adapter '{adapter_name}' has {len(state)} weight tensors")
+            sample_keys = list(state.keys())[:5]
+            logger.debug(f"Sample weight keys: {sample_keys}")
+            if sample_keys:
+                first_key = sample_keys[0]
+                logger.debug(f"First weight shape: {first_key} -> {state[first_key].shape}")
+
             # Try to load the adapter, if it fails due to name conflict, try to delete and retry
             try:
                 flux_pipeline.load_lora_weights(
@@ -449,6 +457,13 @@ class OmniXPerceptionDiffusers:
                         "max": 1.0,
                         "step": 0.05,
                         "tooltip": "Img2img strength: 0.1-0.3 preserves the panorama; 0.5+ introduces hallucinated structure.",
+                    },
+                ),
+                "prompt_mode": (
+                    ["empty", "task_name", "minimal", "descriptive"],
+                    {
+                        "default": "task_name",
+                        "tooltip": "Prompt format: empty='', task_name='distance', minimal='perception: distance', descriptive=full description. Try 'empty' or 'task_name' if quality is poor.",
                     },
                 ),
             }
@@ -565,6 +580,7 @@ class OmniXPerceptionDiffusers:
         num_steps,
         guidance_scale,
         noise_strength,
+        prompt_mode,
     ):
         # Validate adapter availability
         if task not in loaded_adapters:
@@ -597,7 +613,16 @@ class OmniXPerceptionDiffusers:
             raise ValueError(f"Invalid guidance_scale: {guidance_scale}. Expected [1.0, 20.0]")
 
         flux_pipeline.set_adapters([task], adapter_weights=[loaded_adapters[task]["scale"]])
-        logger.info(f"Running perception - Task={task}, steps={num_steps}, noise={noise_strength}")
+        logger.info(f"Running perception - Task={task}, steps={num_steps}, noise={noise_strength}, lora_scale={loaded_adapters[task]['scale']}")
+
+        # Debug: Verify adapter is active
+        if hasattr(flux_pipeline, 'get_active_adapters'):
+            active = flux_pipeline.get_active_adapters()
+            logger.debug(f"Active adapters: {active}")
+        if hasattr(flux_pipeline.transformer, '_hf_peft_config_loaded'):
+            logger.debug(f"PEFT config loaded: {flux_pipeline.transformer._hf_peft_config_loaded}")
+        if hasattr(flux_pipeline.transformer, 'peft_config'):
+            logger.debug(f"PEFT adapters: {list(flux_pipeline.transformer.peft_config.keys())}")
 
         (
             image_latents,
@@ -616,8 +641,17 @@ class OmniXPerceptionDiffusers:
             noise_strength=noise_strength,
         )
 
-        # Enhanced prompt with camera-specific context for better panorama understanding
-        prompt = f"perception task: {task}, equirectangular projection, 360 degree panoramic view"
+        # Generate prompt based on selected mode
+        if prompt_mode == "empty":
+            prompt = ""
+        elif prompt_mode == "task_name":
+            prompt = task  # Just "distance", "normal", "albedo", or "pbr"
+        elif prompt_mode == "minimal":
+            prompt = f"perception: {task}"
+        else:  # descriptive
+            prompt = f"perception task: {task}, equirectangular projection, 360 degree panoramic view"
+
+        logger.debug(f"Using prompt (mode={prompt_mode}): '{prompt}'")
         prompt_embeds, pooled_prompt_embeds, text_ids = flux_pipeline.encode_prompt(
             prompt=prompt,
             prompt_2=None,
