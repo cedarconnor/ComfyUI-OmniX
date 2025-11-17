@@ -393,258 +393,6 @@
       ]
     },
     {
-      "id": 14,
-      "type": "OmniXPerceptionDiffusers",
-      "pos": [
-        352.4208068234805,
-        905.812271152914
-      ],
-      "size": [
-        290.484375,
-        194
-      ],
-      "flags": {},
-      "order": 4,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "flux_pipeline",
-          "type": "FLUX_PIPELINE",
-          "link": 14
-        },
-        {
-          "name": "loaded_adapters",
-          "type": "OMNIX_ADAPTERS",
-          "link": 15
-        },
-        {
-          "name": "panorama",
-          "type": "IMAGE",
-          "link": 44
-        }
-      ],
-      "outputs": [
-        {
-          "name": "perception_output",
-          "type": "IMAGE",
-          "links": [
-            20
-          ]
-        }
-      ],
-      "properties": {
-        "aux_id": "cedarconnor/ComfyUI-OmniX",
-        "ver": "e5d8e788ce09a6a75b5441687bf6067d51027ced",
-        "Node name for S&R": "OmniXPerceptionDiffusers"
-      },
-      "widgets_values": [
-        "distance",
-        28,
-        3.5,
-        0.3,
-        "task_name"
-      ]
-    },
-    {
-      "id": 23,
-      "type": "OmniXPerceptionDiffusers",
-      "pos": [
-        358.7505318486073,
-        1121.9411443717672
-      ],
-      "size": [
-        290.484375,
-        194
-      ],
-      "flags": {},
-      "order": 5,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "flux_pipeline",
-          "type": "FLUX_PIPELINE",
-          "link": 25
-        },
-        {
-          "name": "loaded_adapters",
-          "type": "OMNIX_ADAPTERS",
-          "link": 28
-        },
-        {
-          "name": "panorama",
-          "type": "IMAGE",
-          "link": 45
-        }
-      ],
-      "outputs": [
-        {
-          "name": "perception_output",
-          "type": "IMAGE",
-          "links": [
-            33
-          ]
-        }
-      ],
-      "properties": {
-        "aux_id": "cedarconnor/ComfyUI-OmniX",
-        "ver": "e5d8e788ce09a6a75b5441687bf6067d51027ced",
-        "Node name for S&R": "OmniXPerceptionDiffusers"
-      },
-      "widgets_values": [
-        "normal",
-        28,
-        3.5,
-        0.3,
-        "task_name"
-      ]
-    },
-    {
-      "id": 24,
-      "type": "OmniXPerceptionDiffusers",
-      "pos": [
-        356.4161299031206,
-        1340.5476877230863
-      ],
-      "size": [
-        290.484375,
-        194
-      ],
-      "flags": {},
-      "order": 6,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "flux_pipeline",
-          "type": "FLUX_PIPELINE",
-          "link": 26
-        },
-        {
-          "name": "loaded_adapters",
-          "type": "OMNIX_ADAPTERS",
-          "link": 29
-        },
-        {
-          "name": "panorama",
-          "type": "IMAGE",
-          "link": 46
-        }
-      ],
-      "outputs": [
-        {
-          "name": "perception_output",
-          "type": "IMAGE",
-          "links": [
-            32
-          ]
-        }
-      ],
-      "properties": {
-        "aux_id": "cedarconnor/ComfyUI-OmniX",
-        "ver": "e5d8e788ce09a6a75b5441687bf6067d51027ced",
-        "Node name for S&R": "OmniXPerceptionDiffusers"
-      },
-      "widgets_values": [
-        "albedo",
-        28,
-        3.5,
-        0.3,
-        "task_name"
-      ]
-    },
-    {
-      "id": 25,
-      "type": "OmniXPerceptionDiffusers",
-      "pos": [
-        346.1970619583702,
-        1585.1086348728466
-      ],
-      "size": [
-        290.484375,
-        194
-      ],
-      "flags": {},
-      "order": 7,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "flux_pipeline",
-          "type": "FLUX_PIPELINE",
-          "link": 27
-        },
-        {
-          "name": "loaded_adapters",
-          "type": "OMNIX_ADAPTERS",
-          "link": 30
-        },
-        {
-          "name": "panorama",
-          "type": "IMAGE",
-          "link": 47
-        }
-      ],
-      "outputs": [
-        {
-          "name": "perception_output",
-          "type": "IMAGE",
-          "links": [
-            31,
-            41
-          ]
-        }
-      ],
-      "properties": {
-        "aux_id": "cedarconnor/ComfyUI-OmniX",
-        "ver": "e5d8e788ce09a6a75b5441687bf6067d51027ced",
-        "Node name for S&R": "OmniXPerceptionDiffusers"
-      },
-      "widgets_values": [
-        "pbr",
-        28,
-        3.5,
-        0.3,
-        "task_name"
-      ]
-    },
-    {
-      "id": 16,
-      "type": "LoadImage",
-      "pos": [
-        -833.4210527654757,
-        1250.4093976111878
-      ],
-      "size": [
-        274.080078125,
-        314
-      ],
-      "flags": {},
-      "order": 1,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            43
-          ]
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": null
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.3.67",
-        "Node name for S&R": "LoadImage"
-      },
-      "widgets_values": [
-        "zawiszy_czarnego_4k.jpg",
-        "image"
-      ]
-    },
-    {
       "id": 13,
       "type": "OmniXLoRALoader",
       "pos": [
@@ -789,6 +537,258 @@
       },
       "widgets_values": [
         "OmniX\\PBR_Metallic"
+      ]
+    },
+    {
+      "id": 14,
+      "type": "OmniXPerceptionDiffusers",
+      "pos": [
+        352.4208068234805,
+        905.812271152914
+      ],
+      "size": [
+        290.484375,
+        194
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "flux_pipeline",
+          "type": "FLUX_PIPELINE",
+          "link": 14
+        },
+        {
+          "name": "loaded_adapters",
+          "type": "OMNIX_ADAPTERS",
+          "link": 15
+        },
+        {
+          "name": "panorama",
+          "type": "IMAGE",
+          "link": 44
+        }
+      ],
+      "outputs": [
+        {
+          "name": "perception_output",
+          "type": "IMAGE",
+          "links": [
+            20
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "cedarconnor/ComfyUI-OmniX",
+        "ver": "e5d8e788ce09a6a75b5441687bf6067d51027ced",
+        "Node name for S&R": "OmniXPerceptionDiffusers"
+      },
+      "widgets_values": [
+        "distance",
+        28,
+        3.5,
+        0.3,
+        "empty"
+      ]
+    },
+    {
+      "id": 23,
+      "type": "OmniXPerceptionDiffusers",
+      "pos": [
+        358.7505318486073,
+        1121.9411443717672
+      ],
+      "size": [
+        290.484375,
+        194
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "flux_pipeline",
+          "type": "FLUX_PIPELINE",
+          "link": 25
+        },
+        {
+          "name": "loaded_adapters",
+          "type": "OMNIX_ADAPTERS",
+          "link": 28
+        },
+        {
+          "name": "panorama",
+          "type": "IMAGE",
+          "link": 45
+        }
+      ],
+      "outputs": [
+        {
+          "name": "perception_output",
+          "type": "IMAGE",
+          "links": [
+            33
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "cedarconnor/ComfyUI-OmniX",
+        "ver": "e5d8e788ce09a6a75b5441687bf6067d51027ced",
+        "Node name for S&R": "OmniXPerceptionDiffusers"
+      },
+      "widgets_values": [
+        "normal",
+        28,
+        3.5,
+        0.3,
+        "empty"
+      ]
+    },
+    {
+      "id": 24,
+      "type": "OmniXPerceptionDiffusers",
+      "pos": [
+        356.4161299031206,
+        1340.5476877230863
+      ],
+      "size": [
+        290.484375,
+        194
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "flux_pipeline",
+          "type": "FLUX_PIPELINE",
+          "link": 26
+        },
+        {
+          "name": "loaded_adapters",
+          "type": "OMNIX_ADAPTERS",
+          "link": 29
+        },
+        {
+          "name": "panorama",
+          "type": "IMAGE",
+          "link": 46
+        }
+      ],
+      "outputs": [
+        {
+          "name": "perception_output",
+          "type": "IMAGE",
+          "links": [
+            32
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "cedarconnor/ComfyUI-OmniX",
+        "ver": "e5d8e788ce09a6a75b5441687bf6067d51027ced",
+        "Node name for S&R": "OmniXPerceptionDiffusers"
+      },
+      "widgets_values": [
+        "albedo",
+        28,
+        3.5,
+        0.3,
+        "empty"
+      ]
+    },
+    {
+      "id": 25,
+      "type": "OmniXPerceptionDiffusers",
+      "pos": [
+        346.1970619583702,
+        1585.1086348728466
+      ],
+      "size": [
+        290.484375,
+        194
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "flux_pipeline",
+          "type": "FLUX_PIPELINE",
+          "link": 27
+        },
+        {
+          "name": "loaded_adapters",
+          "type": "OMNIX_ADAPTERS",
+          "link": 30
+        },
+        {
+          "name": "panorama",
+          "type": "IMAGE",
+          "link": 47
+        }
+      ],
+      "outputs": [
+        {
+          "name": "perception_output",
+          "type": "IMAGE",
+          "links": [
+            31,
+            41
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "cedarconnor/ComfyUI-OmniX",
+        "ver": "e5d8e788ce09a6a75b5441687bf6067d51027ced",
+        "Node name for S&R": "OmniXPerceptionDiffusers"
+      },
+      "widgets_values": [
+        "pbr",
+        28,
+        3.5,
+        0.3,
+        "empty"
+      ]
+    },
+    {
+      "id": 16,
+      "type": "LoadImage",
+      "pos": [
+        -833.4210527654757,
+        1250.4093976111878
+      ],
+      "size": [
+        274.080078125,
+        314
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            43
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.67",
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "small_empty_room_3_4k.png",
+        "image"
       ]
     }
   ],
@@ -998,10 +998,10 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.6303940863128626,
+      "scale": 0.355841027383682,
       "offset": [
-        -471.0265140937724,
-        -683.8652283784396
+        940.3288092054695,
+        -898.9402354913943
       ]
     },
     "description": "Simple test workflow for OmniX perception with 5 denoising steps for fast iteration",
