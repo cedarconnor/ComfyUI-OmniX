@@ -527,9 +527,18 @@ class OmniXPerceiver:
             distance = distance.to(torch.float32)
 
         # Remove outliers (clip to percentiles)
+        # Use sampling for large tensors to avoid memory spikes
         distance_flat = distance.flatten()
-        p1 = torch.quantile(distance_flat, 0.01)
-        p99 = torch.quantile(distance_flat, 0.99)
+        sample_size = 50000
+
+        if distance_flat.numel() > sample_size:
+            indices = torch.randperm(distance_flat.numel(), device=distance_flat.device)[:sample_size]
+            sampled = distance_flat[indices]
+            p1 = torch.quantile(sampled, 0.01)
+            p99 = torch.quantile(sampled, 0.99)
+        else:
+            p1 = torch.quantile(distance_flat, 0.01)
+            p99 = torch.quantile(distance_flat, 0.99)
 
         distance = torch.clamp(distance, p1, p99)
 

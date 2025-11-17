@@ -14,6 +14,9 @@ import torch
 from typing import Dict
 from pathlib import Path
 import safetensors.torch
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def convert_omnix_weights_to_comfyui(
@@ -57,15 +60,25 @@ def convert_omnix_weights_to_comfyui(
         v_B = state_dict[f"{omnix_prefix}.to_v.lora_B.weight"]  # [out_dim, rank]
 
         # For ComfyUI's fused qkv layer:
-        # - lora_A can be averaged (same input projection)
-        # - lora_B must be concatenated [Q, K, V] along output dim
+        # IMPORTANT: We must preserve Q, K, V independence
+        # Solution: Use block-diagonal structure to maintain all learned information
 
-        # Average the A matrices (they all project from same input space)
-        fused_A = (q_A + k_A + v_A) / 3.0
+        # Stack lora_A matrices vertically: [rank*3, in_dim]
+        # This preserves separate down-projections for Q, K, V
+        fused_A = torch.cat([q_A, k_A, v_A], dim=0)
 
-        # Concatenate the B matrices along output dimension
-        # Shape: [out_dim * 3, rank]
-        fused_B = torch.cat([q_B, k_B, v_B], dim=0)
+        # Create block-diagonal lora_B: [out_dim*3, rank*3]
+        # Each block corresponds to Q, K, or V projection
+        rank = q_A.shape[0]
+        out_dim = q_B.shape[0]
+        fused_B = torch.zeros(out_dim * 3, rank * 3, dtype=q_B.dtype, device=q_B.device)
+
+        # Block 1: Q projection
+        fused_B[0:out_dim, 0:rank] = q_B
+        # Block 2: K projection
+        fused_B[out_dim:2*out_dim, rank:2*rank] = k_B
+        # Block 3: V projection
+        fused_B[2*out_dim:3*out_dim, 2*rank:3*rank] = v_B
 
         # Store for ComfyUI double_blocks
         comfyui_key = f"double_blocks.{block_idx}.img_attn.qkv"
@@ -94,11 +107,19 @@ def convert_omnix_weights_to_comfyui(
         v_B = state_dict[f"{omnix_prefix}.to_v.lora_B.weight"]
 
         # ComfyUI's linear1 fuses QKV with feedforward
-        # For now, just handle QKV part (linear1's first 3*dim outputs)
-        # The feedforward part is less critical for attention
+        # Use block-diagonal structure to preserve Q, K, V independence
 
-        fused_A = (q_A + k_A + v_A) / 3.0
-        fused_B = torch.cat([q_B, k_B, v_B], dim=0)
+        # Stack lora_A matrices vertically: [rank*3, in_dim]
+        fused_A = torch.cat([q_A, k_A, v_A], dim=0)
+
+        # Create block-diagonal lora_B: [out_dim*3, rank*3]
+        rank = q_A.shape[0]
+        out_dim = q_B.shape[0]
+        fused_B = torch.zeros(out_dim * 3, rank * 3, dtype=q_B.dtype, device=q_B.device)
+
+        fused_B[0:out_dim, 0:rank] = q_B
+        fused_B[out_dim:2*out_dim, rank:2*rank] = k_B
+        fused_B[2*out_dim:3*out_dim, 2*rank:3*rank] = v_B
 
         # Store for ComfyUI single_blocks.linear1
         # Note: This only covers the QKV part of linear1
@@ -108,7 +129,7 @@ def convert_omnix_weights_to_comfyui(
             "lora_B.weight": fused_B
         }
 
-    print(f"[Weight Converter] Converted {len(converted)} layers")
+    logger.info(f"Converted {len(converted)} LoRA layers with preserved Q/K/V structure")
     return converted
 
 
@@ -122,12 +143,12 @@ def load_and_convert_adapter(adapter_path: Path) -> Dict[str, Dict[str, torch.Te
     Returns:
         Converted weights ready for ComfyUI injection
     """
-    print(f"[Weight Converter] Loading adapter from {adapter_path}")
+    logger.info(f"Loading adapter from {adapter_path}")
     state_dict = safetensors.torch.load_file(str(adapter_path))
 
-    print(f"[Weight Converter] Original: {len(state_dict)} weights")
+    logger.debug(f"Original: {len(state_dict)} weights")
     converted = convert_omnix_weights_to_comfyui(state_dict)
-    print(f"[Weight Converter] Converted: {len(converted)} layers")
+    logger.info(f"Converted: {len(converted)} layers")
 
     return converted
 
