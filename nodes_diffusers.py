@@ -21,6 +21,8 @@ from diffusers.utils.torch_utils import randn_tensor
 from diffusers.pipelines.flux.pipeline_flux import calculate_shift
 from safetensors.torch import load_file
 
+from .omnix.diffusers_key_remap import remap_omnix_to_diffusers_flux, verify_key_format
+
 logger = logging.getLogger(__name__)
 
 REQUIRED_DIFFUSERS_FILES = (
@@ -357,6 +359,22 @@ class OmniXLoRALoader:
             logger.info(f"Loading {adapter_name} from {adapter_path}")
             state = load_file(str(adapter_path))
 
+            # CRITICAL: Check if keys need remapping for Diffusers compatibility
+            key_patterns = verify_key_format(state)
+            needs_remap = (
+                key_patterns.get("transformer_blocks", 0) > 0 or
+                key_patterns.get("single_transformer_blocks", 0) > 0
+            )
+
+            if needs_remap:
+                logger.warning(f"Adapter '{adapter_name}' uses OmniX key format - remapping to Diffusers format")
+                logger.debug(f"  Original format: {key_patterns}")
+                state = remap_omnix_to_diffusers_flux(state)
+                key_patterns_new = verify_key_format(state)
+                logger.info(f"  Remapped format: {key_patterns_new}")
+            else:
+                logger.info(f"Adapter '{adapter_name}' already in Diffusers format")
+
             # Debug: Log adapter weight structure
             logger.debug(f"Adapter '{adapter_name}' has {len(state)} weight tensors")
             sample_keys = list(state.keys())[:5]
@@ -365,13 +383,21 @@ class OmniXLoRALoader:
                 first_key = sample_keys[0]
                 logger.debug(f"First weight shape: {first_key} -> {state[first_key].shape}")
 
-            # Try to load the adapter, if it fails due to name conflict, try to delete and retry
+            # Save remapped state to temporary file for load_lora_weights
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix=".safetensors", delete=False) as tmp_file:
+                temp_adapter_path = tmp_file.name
+                from safetensors.torch import save_file
+                save_file(state, temp_adapter_path)
+
             try:
+                # Load from temporary remapped file
                 flux_pipeline.load_lora_weights(
-                    adapter_dir,
-                    weight_name=filename,
+                    Path(temp_adapter_path).parent,
+                    weight_name=Path(temp_adapter_path).name,
                     adapter_name=adapter_name,
                 )
+                logger.info(f"Loaded adapter '{adapter_name}' successfully")
             except ValueError as e:
                 if "already in use" in str(e):
                     logger.warning(f"Adapter {adapter_name} already exists, attempting to delete and retry...")
@@ -381,10 +407,10 @@ class OmniXLoRALoader:
                             flux_pipeline.delete_adapters(adapter_name)
                             logger.info(f"Deleted existing adapter: {adapter_name}")
 
-                        # Retry loading
+                        # Retry loading from temp file
                         flux_pipeline.load_lora_weights(
-                            adapter_dir,
-                            weight_name=filename,
+                            Path(temp_adapter_path).parent,
+                            weight_name=Path(temp_adapter_path).name,
                             adapter_name=adapter_name,
                         )
                         logger.info(f"Successfully loaded {adapter_name} after retry")
@@ -394,6 +420,13 @@ class OmniXLoRALoader:
                         raise
                 else:
                     raise
+            finally:
+                # Clean up temporary file
+                import os
+                try:
+                    os.unlink(temp_adapter_path)
+                except Exception:
+                    pass  # Ignore cleanup errors
 
             loaded[adapter_name] = {
                 "path": str(adapter_path),
