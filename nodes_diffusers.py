@@ -294,16 +294,54 @@ class OmniXLoRALoader:
             return flux_pipeline, {}
 
         # Clear previously loaded adapters so we can re-use adapter names safely
-        if hasattr(flux_pipeline, "delete_adapters"):
+        # Try multiple methods to ensure adapters are properly cleared
+        adapters_cleared = False
+
+        # Method 1: Try to get list of existing adapters and delete them individually
+        if hasattr(flux_pipeline, "get_list_adapters"):
+            try:
+                existing = flux_pipeline.get_list_adapters()
+                if existing:
+                    logger.info(f"Found existing adapters: {existing}")
+                    for adapter_info in existing:
+                        adapter_name = adapter_info if isinstance(adapter_info, str) else adapter_info.get("name", "")
+                        if adapter_name:
+                            try:
+                                flux_pipeline.delete_adapters(adapter_name)
+                                logger.debug(f"Deleted existing adapter: {adapter_name}")
+                            except Exception as e:
+                                logger.debug(f"Could not delete adapter {adapter_name}: {e}")
+                    adapters_cleared = True
+            except Exception as exc:
+                logger.debug(f"get_list_adapters failed: {exc}")
+
+        # Method 2: Try to delete all adapters
+        if not adapters_cleared and hasattr(flux_pipeline, "delete_adapters"):
             try:
                 flux_pipeline.delete_adapters()
+                logger.info("Cleared all existing adapters")
+                adapters_cleared = True
             except Exception as exc:
-                logger.debug("delete_adapters failed: %s", exc)
-        elif hasattr(flux_pipeline, "unload_lora_weights"):
+                logger.debug(f"delete_adapters failed: {exc}")
+
+        # Method 3: Try to unload LoRA weights
+        if not adapters_cleared and hasattr(flux_pipeline, "unload_lora_weights"):
             try:
                 flux_pipeline.unload_lora_weights()
+                logger.info("Unloaded existing LoRA weights")
+                adapters_cleared = True
             except Exception as exc:
-                logger.debug("unload_lora_weights failed: %s", exc)
+                logger.debug(f"unload_lora_weights failed: {exc}")
+
+        # Method 4: Try to delete individual adapters we're about to load
+        if not adapters_cleared:
+            for adapter_name in requested:
+                if hasattr(flux_pipeline, "delete_adapters"):
+                    try:
+                        flux_pipeline.delete_adapters(adapter_name)
+                        logger.debug(f"Deleted adapter: {adapter_name}")
+                    except Exception as exc:
+                        logger.debug(f"Could not delete adapter {adapter_name}: {exc}")
 
         loaded: Dict[str, Dict[str, torch.Tensor]] = {}
         adapter_names: List[str] = []
@@ -318,11 +356,37 @@ class OmniXLoRALoader:
 
             logger.info(f"Loading {adapter_name} from {adapter_path}")
             state = load_file(str(adapter_path))
-            flux_pipeline.load_lora_weights(
-                adapter_dir,
-                weight_name=filename,
-                adapter_name=adapter_name,
-            )
+
+            # Try to load the adapter, if it fails due to name conflict, try to delete and retry
+            try:
+                flux_pipeline.load_lora_weights(
+                    adapter_dir,
+                    weight_name=filename,
+                    adapter_name=adapter_name,
+                )
+            except ValueError as e:
+                if "already in use" in str(e):
+                    logger.warning(f"Adapter {adapter_name} already exists, attempting to delete and retry...")
+                    try:
+                        # Try to delete the specific adapter
+                        if hasattr(flux_pipeline, "delete_adapters"):
+                            flux_pipeline.delete_adapters(adapter_name)
+                            logger.info(f"Deleted existing adapter: {adapter_name}")
+
+                        # Retry loading
+                        flux_pipeline.load_lora_weights(
+                            adapter_dir,
+                            weight_name=filename,
+                            adapter_name=adapter_name,
+                        )
+                        logger.info(f"Successfully loaded {adapter_name} after retry")
+                    except Exception as retry_error:
+                        logger.error(f"Failed to load {adapter_name} even after deleting: {retry_error}")
+                        logger.error(f"Please restart ComfyUI to clear adapter cache")
+                        raise
+                else:
+                    raise
+
             loaded[adapter_name] = {
                 "path": str(adapter_path),
                 "weights": len(state),
