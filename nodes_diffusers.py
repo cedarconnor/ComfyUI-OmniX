@@ -407,6 +407,27 @@ class OmniXLoRALoader:
             flux_pipeline.set_adapters(adapter_names, adapter_weights=adapter_scales)
             logger.info(f"Active adapters: {adapter_names}")
 
+            # CRITICAL: Verify LoRA layers were actually injected into the model
+            lora_layers_found = []
+            if hasattr(flux_pipeline.transformer, 'peft_config'):
+                logger.info(f"PEFT config loaded: {list(flux_pipeline.transformer.peft_config.keys())}")
+
+                # Check if actual LoRA modules exist in the transformer
+                for name, module in flux_pipeline.transformer.named_modules():
+                    if hasattr(module, 'lora_A') or hasattr(module, 'lora_B'):
+                        lora_layers_found.append(name)
+
+                if lora_layers_found:
+                    logger.info(f"✓ Found {len(lora_layers_found)} LoRA-injected layers")
+                    logger.debug(f"  Sample layers: {lora_layers_found[:5]}")
+                else:
+                    logger.error("✗ CRITICAL: No LoRA layers found in transformer!")
+                    logger.error("  Adapters loaded but NOT applied - likely key mismatch")
+                    logger.error("  Outputs will be incorrect. See CRITICAL_ADAPTER_FAILURE_ANALYSIS.md")
+            else:
+                logger.error("✗ CRITICAL: PEFT not initialized on transformer!")
+                logger.error("  Adapters will NOT be applied during inference")
+
         return flux_pipeline, loaded
 
 
