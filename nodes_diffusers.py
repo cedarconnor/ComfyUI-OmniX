@@ -14,6 +14,8 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import folder_paths
 import comfy.model_management as model_management
 from diffusers import FluxPipeline
@@ -22,6 +24,7 @@ from diffusers.pipelines.flux.pipeline_flux import calculate_shift
 from safetensors.torch import load_file
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 REQUIRED_DIFFUSERS_FILES = (
     ("", "model_index.json"),
@@ -34,6 +37,168 @@ REQUIRED_DIFFUSERS_FILES = (
     ("tokenizer_2", "spiece.model"),
     ("vae", "config.json"),
 )
+
+
+class FeedForwardLoRALinear(nn.Module):
+    """
+    Lightweight LoRA wrapper for Flux feed-forward layers that PEFT doesn't patch.
+    """
+
+    def __init__(self, base_linear: nn.Linear):
+        super().__init__()
+        self.base_linear = base_linear
+        self.lora_A = nn.ModuleDict()
+        self.lora_B = nn.ModuleDict()
+        self.lora_scale: Dict[str, float] = {}
+        self.active_adapter: Optional[str] = None
+
+    def add_adapter(self, name: str, down_weight: torch.Tensor, up_weight: torch.Tensor, scale: float) -> None:
+        in_features = self.base_linear.in_features
+        out_features = self.base_linear.out_features
+        rank = down_weight.shape[0]
+        dtype = self.base_linear.weight.dtype
+        device = self.base_linear.weight.device
+
+        lora_A = nn.Linear(in_features, rank, bias=False, dtype=dtype, device=device)
+        lora_B = nn.Linear(rank, out_features, bias=False, dtype=dtype, device=device)
+        lora_A.weight.data.copy_(down_weight.to(device=device, dtype=dtype))
+        lora_B.weight.data.copy_(up_weight.to(device=device, dtype=dtype))
+        self.lora_A[name] = lora_A
+        self.lora_B[name] = lora_B
+        self.lora_scale[name] = float(scale)
+
+    def set_active_adapter(self, adapter_name: Optional[str]) -> None:
+        self.active_adapter = adapter_name
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        result = self.base_linear(x)
+        adapter_name = self.active_adapter
+        if adapter_name is None:
+            return result
+        if adapter_name not in self.lora_A or adapter_name not in self.lora_B:
+            return result
+
+        lora_A = self.lora_A[adapter_name]
+        lora_B = self.lora_B[adapter_name]
+        scale = self.lora_scale.get(adapter_name, 1.0)
+        delta = F.linear(F.linear(x, lora_A.weight), lora_B.weight)
+        return result + delta * scale
+
+
+def _split_state_dict_for_ff(state: Dict[str, torch.Tensor]) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
+    """
+    Separate attention LoRA weights handled by PEFT from feed-forward weights we patch manually.
+    """
+    attn_state: Dict[str, torch.Tensor] = {}
+    ff_state: Dict[str, torch.Tensor] = {}
+    for key, value in state.items():
+        if ".ff." in key:
+            ff_state[key] = value
+        else:
+            attn_state[key] = value
+    return attn_state, ff_state
+
+
+def _group_ff_layers(ff_state: Dict[str, torch.Tensor]) -> Dict[str, Dict[str, torch.Tensor]]:
+    grouped: Dict[str, Dict[str, torch.Tensor]] = {}
+    for key, value in ff_state.items():
+        if key.endswith("lora_A.weight"):
+            module_key = key[: -len(".lora_A.weight")]
+            grouped.setdefault(module_key, {})["lora_A.weight"] = value
+        elif key.endswith("lora_B.weight"):
+            module_key = key[: -len(".lora_B.weight")]
+            grouped.setdefault(module_key, {})["lora_B.weight"] = value
+    return grouped
+
+
+def _resolve_module(root: nn.Module, path: str) -> Tuple[Optional[nn.Module], str, nn.Module]:
+    """
+    Traverse modules by dotted path and return (parent, attribute/index, target_module).
+    """
+    parts = path.split(".")
+    module: nn.Module = root
+    parent: Optional[nn.Module] = None
+    attr_name = ""
+    for part in parts:
+        parent = module
+        attr_name = part
+        if part.isdigit():
+            module = module[int(part)]  # type: ignore[index]
+        else:
+            module = getattr(module, part)
+    return parent, attr_name, module
+
+
+def _replace_child_module(parent: Optional[nn.Module], name: str, new_module: nn.Module) -> None:
+    if parent is None:
+        raise ValueError("Cannot replace root module")
+    if name.isdigit():
+        index = int(name)
+        if isinstance(parent, nn.ModuleList):
+            parent[index] = new_module
+        else:
+            raise ValueError(f"Cannot assign index '{index}' on parent type {type(parent)}")
+    else:
+        setattr(parent, name, new_module)
+
+
+def _set_ff_active_adapter(flux_pipeline: FluxPipeline, adapter_name: Optional[str]) -> None:
+    wrappers: Dict[str, FeedForwardLoRALinear] = getattr(flux_pipeline, "_omnix_ff_wrappers", {})
+    logger.debug("Setting feed-forward adapters to %s (%d wrappers)", adapter_name, len(wrappers))
+    for wrapper in wrappers.values():
+        wrapper.set_active_adapter(adapter_name)
+
+
+def _inject_feedforward_lora(
+    flux_pipeline: FluxPipeline,
+    adapter_name: str,
+    ff_state: Dict[str, torch.Tensor],
+    scale: float,
+) -> None:
+    if not ff_state:
+        return
+
+    grouped = _group_ff_layers(ff_state)
+    if not grouped:
+        return
+
+    if not hasattr(flux_pipeline, "_omnix_ff_wrappers"):
+        flux_pipeline._omnix_ff_wrappers = {}
+
+    wrappers: Dict[str, FeedForwardLoRALinear] = flux_pipeline._omnix_ff_wrappers  # type: ignore[attr-defined]
+    transformer = flux_pipeline.transformer
+    logger.debug("Feed-forward targets for %s: %s", adapter_name, list(grouped.keys()))
+    for module_key, weights in grouped.items():
+        if "lora_A.weight" not in weights or "lora_B.weight" not in weights:
+            continue
+
+        # Remove leading "transformer." so we can resolve on transformer module
+        relative_key = module_key
+        if relative_key.startswith("transformer."):
+            relative_key = relative_key[len("transformer.") :]
+
+        try:
+            parent, attr_name, target_module = _resolve_module(transformer, relative_key)
+        except AttributeError:
+            logger.warning("Feed-forward LoRA target not found: %s", module_key)
+            continue
+
+        wrapper = wrappers.get(relative_key)
+        if wrapper is None:
+            if isinstance(target_module, FeedForwardLoRALinear):
+                wrapper = target_module
+            else:
+                if not isinstance(target_module, nn.Linear):
+                    logger.warning("Feed-forward LoRA target is not linear (%s -> %s)", module_key, type(target_module))
+                    continue
+                wrapper = FeedForwardLoRALinear(target_module)
+                _replace_child_module(parent, attr_name, wrapper)
+            wrappers[relative_key] = wrapper
+
+        wrapper.add_adapter(adapter_name, weights["lora_A.weight"], weights["lora_B.weight"], scale)
+        logger.debug("Loaded feed-forward LoRA for %s -> %s", adapter_name, module_key)
+
+    flux_pipeline._omnix_ff_wrappers = wrappers  # type: ignore[attr-defined]
 
 
 class FluxDiffusersLoader:
@@ -356,21 +521,26 @@ class OmniXLoRALoader:
 
             logger.info(f"Loading {adapter_name} from {adapter_path}")
             state = load_file(str(adapter_path))
+            attn_state, ff_state = _split_state_dict_for_ff(state)
+            if ff_state:
+                ff_layers = len(ff_state) // 2
+                logger.info(f"Injecting {ff_layers} feed-forward LoRA layers for '{adapter_name}'")
+                _inject_feedforward_lora(flux_pipeline, adapter_name, ff_state, lora_scale)
 
             # Debug: Log adapter weight structure
             logger.debug(f"Adapter '{adapter_name}' has {len(state)} weight tensors")
-            sample_keys = list(state.keys())[:5]
+            sample_keys = list(attn_state.keys())[:5]
             logger.debug(f"Sample weight keys: {sample_keys}")
             if sample_keys:
                 first_key = sample_keys[0]
-                logger.debug(f"First weight shape: {first_key} -> {state[first_key].shape}")
+                logger.debug(f"First weight shape: {first_key} -> {attn_state[first_key].shape}")
 
             # Save state to temporary file for load_lora_weights (API requires file path)
             import tempfile
             with tempfile.NamedTemporaryFile(suffix=".safetensors", delete=False) as tmp_file:
                 temp_adapter_path = tmp_file.name
                 from safetensors.torch import save_file
-                save_file(state, temp_adapter_path)
+                save_file(attn_state, temp_adapter_path)
 
             try:
                 # Load from temporary remapped file
@@ -649,6 +819,7 @@ class OmniXPerceptionDiffusers:
             raise ValueError(f"Invalid guidance_scale: {guidance_scale}. Expected [1.0, 20.0]")
 
         flux_pipeline.set_adapters([task], adapter_weights=[loaded_adapters[task]["scale"]])
+        _set_ff_active_adapter(flux_pipeline, task)
         logger.info(f"Running perception - Task={task}, steps={num_steps}, noise={noise_strength}, lora_scale={loaded_adapters[task]['scale']}")
 
         # Debug: Verify adapter is active

@@ -210,7 +210,7 @@ These match the Diffusers model structure **exactly**.
 
 - **nodes_diffusers.py**: Updated to remove remapping (fixed)
 - **omnix/diffusers_key_remap.py**: DELETED (was incorrect)
-- **KEY_REMAPPING_FIX_SUMMARY.md**: Previous (incorrect) analysis
+- **KEY_REMAPPING_FIX_SUMMARY.md** *(removed)*: Previous (incorrect) analysis retained in git history only for reference
 - **CRITICAL_ADAPTER_FAILURE_ANALYSIS.md**: Original correct diagnosis
 - **OUTPUT_QUALITY_INVESTIGATION.md**: Initial investigation
 
