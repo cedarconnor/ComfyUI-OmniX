@@ -272,7 +272,7 @@ Typical workflow: `LoadImage → FluxDiffusersLoader → OmniXLoRALoader → Omn
 |---------|-----|
 | **Models not found** | See [Model Downloads](#model-downloads) section for exact file locations and naming. Verify directory structure matches exactly. |
 | `Adapter 'XYZ' not loaded` | 1) Ensure the checkbox for that adapter is enabled in `OmniXLoRALoader`<br>2) Verify the `.safetensors` file exists in `models/loras/omnix/`<br>3) Check exact filename (e.g., `rgb_to_depth_depth.safetensors` - don't rename) |
-| `Adapter name ... already in use` | Requeue—OmniXLoRALoader now clears adapters automatically. If issue persists, restart ComfyUI. |
+| `Adapter name ... already in use` | **FIXED** in latest version. OmniXLoRALoader now automatically detects and clears existing adapters. Simply re-queue the workflow. If you still see this error, update to the latest version. |
 | Output looks identical to input | `noise_strength` too low (below 0.1). Increase to **0.20–0.35** for proper perception. |
 | Outputs look completely hallucinated | `noise_strength` too high (≥0.5). Drop to **0.20–0.35** for perception tasks. |
 | Poor quality / noisy outputs | 1) Ensure `num_steps=28` (default changed from 20)<br>2) Use recommended `guidance_scale` per task (see table above)<br>3) Verify you're using **bfloat16** dtype<br>4) Check aspect ratio is exactly 2:1 |
@@ -280,13 +280,14 @@ Typical workflow: `LoadImage → FluxDiffusersLoader → OmniXLoRALoader → Omn
 | CUDA out of memory | 1) Reduce image resolution (try 512×256 instead of 2048×1024)<br>2) Close other GPU applications<br>3) Use `torch_dtype="float16"` instead of bfloat16 (slightly faster but lower quality) |
 | Aspect ratio warning | Your input image is not 2:1 ratio. Resize to 1024×512, 2048×1024, or other 2:1 dimensions for best results. |
 
-### Recent Improvements (v1.1)
+### Recent Improvements (v1.2)
 
-✅ **Fixed critical LoRA weight averaging bug** - Significantly improved output quality
-✅ **Updated default steps to 28** - Matches original OmniX implementation
-✅ **Added comprehensive input validation** - Clear error messages for common mistakes
-✅ **Optimized performance** - 50-70% faster on high-resolution images
-✅ **Improved logging** - Better debugging and error messages
+✅ **Fixed critical LoRA weight averaging bug** - Significantly improved output quality (v1.1)
+✅ **Fixed "adapter already in use" error** - Automatic adapter clearing when re-queueing workflows (v1.2)
+✅ **Updated default steps to 28** - Matches original OmniX implementation (v1.1)
+✅ **Added comprehensive input validation** - Clear error messages for common mistakes (v1.1)
+✅ **Optimized performance** - 50-70% faster on high-resolution images (v1.1)
+✅ **Improved logging** - Better debugging and error messages (v1.1)
 
 See `QUALITY_REVIEW_FINDINGS.md` and `IMPLEMENTATION_SUMMARY.md` for detailed technical information about the improvements.
 
