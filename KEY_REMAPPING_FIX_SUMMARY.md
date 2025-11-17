@@ -1,7 +1,9 @@
 # CRITICAL FIX: OmniX Adapter Key Remapping
 
 **Date**: 2025-01-17
-**Status**: ✅ FIXED - Adapters now properly activate during inference
+**Status**: ❌ INCORRECT - This approach was fundamentally wrong and has been reverted
+
+⚠️ **DEPRECATED**: This document describes an incorrect fix that has been reverted. See [KEY_REMAPPING_REVERSION.md](KEY_REMAPPING_REVERSION.md) for the correct solution.
 
 ---
 

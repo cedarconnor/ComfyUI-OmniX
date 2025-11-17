@@ -21,8 +21,6 @@ from diffusers.utils.torch_utils import randn_tensor
 from diffusers.pipelines.flux.pipeline_flux import calculate_shift
 from safetensors.torch import load_file
 
-from .omnix.diffusers_key_remap import remap_omnix_to_diffusers_flux, verify_key_format
-
 logger = logging.getLogger(__name__)
 
 REQUIRED_DIFFUSERS_FILES = (
@@ -359,22 +357,6 @@ class OmniXLoRALoader:
             logger.info(f"Loading {adapter_name} from {adapter_path}")
             state = load_file(str(adapter_path))
 
-            # CRITICAL: Check if keys need remapping for Diffusers compatibility
-            key_patterns = verify_key_format(state)
-            needs_remap = (
-                key_patterns.get("transformer_blocks", 0) > 0 or
-                key_patterns.get("single_transformer_blocks", 0) > 0
-            )
-
-            if needs_remap:
-                logger.warning(f"Adapter '{adapter_name}' uses OmniX key format - remapping to Diffusers format")
-                logger.debug(f"  Original format: {key_patterns}")
-                state = remap_omnix_to_diffusers_flux(state)
-                key_patterns_new = verify_key_format(state)
-                logger.info(f"  Remapped format: {key_patterns_new}")
-            else:
-                logger.info(f"Adapter '{adapter_name}' already in Diffusers format")
-
             # Debug: Log adapter weight structure
             logger.debug(f"Adapter '{adapter_name}' has {len(state)} weight tensors")
             sample_keys = list(state.keys())[:5]
@@ -383,7 +365,7 @@ class OmniXLoRALoader:
                 first_key = sample_keys[0]
                 logger.debug(f"First weight shape: {first_key} -> {state[first_key].shape}")
 
-            # Save remapped state to temporary file for load_lora_weights
+            # Save state to temporary file for load_lora_weights (API requires file path)
             import tempfile
             with tempfile.NamedTemporaryFile(suffix=".safetensors", delete=False) as tmp_file:
                 temp_adapter_path = tmp_file.name
