@@ -1,195 +1,395 @@
-# ComfyUI_OmniX
+# ComfyUI-OmniX
 
-Experimental ComfyUI node pack that integrates **OmniX** panoramic generation + perception on top of **FLUX.1-dev**.
+<div align="center">
 
-This repo is meant to be used together with:
+**Panoramic Perception for ComfyUI**
 
-- `design_doc_omnix_comfyui.md` – overall architecture and node design
-- `agents_omnix_comfyui.md` – roles / workflow for building and maintaining the pack
+Integrate [OmniX](https://github.com/HKU-MMLab/OmniX) panoramic generation and perception capabilities into ComfyUI using FLUX.1-dev.
 
----
+[Installation](#installation) • [Quick Start](#quick-start) • [Workflows](#workflows) • [Documentation](#documentation)
 
-## 1. What This Node Pack Aims To Do
-
-- Use **FLUX.1-dev** as the base model.
-- Add **OmniX LoRAs** (converted to Comfy format) for:
-  - `text_to_pano` – text → RGB panorama
-  - `rgb_to_depth` – pano → depth
-  - `rgb_to_normal` – pano → surface normals
-  - `rgb_to_albedo` – pano → albedo
-  - `rgb_to_pbr` – pano → roughness / metal
-  - `rgb_to_semantic` – pano → semantic segmentation
-- Expose simple Comfy nodes:
-  - `OmniX_PanoPerception_Depth`
-  - `OmniX_PanoPerception_Normal`
-  - `OmniX_PanoPerception_PBR`
-  - `OmniX_PanoPerception_Semantic`
-
-> **Note:** The Python in `omni_x_nodes.py` is intentionally conservative and uses **stub implementations** for perception. You are expected to wire in the real OmniX logic from the official repo (e.g., `run_pano_perception.py`) via `omni_x_utils.py` or similar.
+</div>
 
 ---
 
-## 2. Installation
+## What is OmniX?
 
-1. Create a folder under your ComfyUI custom nodes, for example:
+**OmniX** is a powerful panoramic generation and perception system built on FLUX.1-dev that enables:
 
-   ```text
-   ComfyUI/
-     custom_nodes/
-       ComfyUI_OmniX/
-         __init__.py
-         omni_x_nodes.py
-         omni_x_utils.py         # you add this
-         design_doc_omnix_comfyui.md   # optional, docs
-         agents_omnix_comfyui.md       # optional, docs
-   ```
+- **Text-to-Panorama Generation**: Create 360° RGB panoramas from text prompts
+- **Depth Estimation**: Extract metric depth maps from panoramas
+- **Surface Normal Estimation**: Compute geometric surface normals
+- **PBR Material Estimation**: Generate physically-based rendering materials (albedo, roughness, metallic)
+- **Semantic Segmentation**: Identify and segment scene elements
 
-2. Copy the provided `omni_x_nodes.py` into that folder.
-
-3. Create a minimal `__init__.py` that exposes the node classes:
-
-   ```python
-   from .omni_x_nodes import (
-       OmniX_PanoPerception_Depth,
-       OmniX_PanoPerception_Normal,
-       OmniX_PanoPerception_PBR,
-       OmniX_PanoPerception_Semantic,
-   )
-
-   NODE_CLASS_MAPPINGS = {
-       "OmniX_PanoPerception_Depth": OmniX_PanoPerception_Depth,
-       "OmniX_PanoPerception_Normal": OmniX_PanoPerception_Normal,
-       "OmniX_PanoPerception_PBR": OmniX_PanoPerception_PBR,
-       "OmniX_PanoPerception_Semantic": OmniX_PanoPerception_Semantic,
-   }
-
-   NODE_DISPLAY_NAME_MAPPINGS = {
-       "OmniX_PanoPerception_Depth": "OmniX Pano Perception: Depth",
-       "OmniX_PanoPerception_Normal": "OmniX Pano Perception: Normal",
-       "OmniX_PanoPerception_PBR": "OmniX Pano Perception: PBR",
-       "OmniX_PanoPerception_Semantic": "OmniX Pano Perception: Semantic",
-   }
-   ```
-
-4. Restart ComfyUI.
-
-If everything is wired correctly, you should see a new category **“OmniX/Perception”** (or whatever you put in `CATEGORY`) with the OmniX nodes.
+This ComfyUI custom node pack brings these capabilities to your ComfyUI workflows.
 
 ---
 
-## 3. Models and LoRAs
+## Features
 
-Place your Flux base checkpoint and OmniX LoRAs into the usual Comfy model directories, e.g.:
+- ✨ **Native ComfyUI Integration**: Works seamlessly with existing ComfyUI nodes
+- 🎨 **Multiple Perception Modes**: Depth, normals, PBR, and semantic segmentation
+- 🔧 **Flexible Post-Processing**: Customizable normalization, colorization, and visualization
+- 📦 **Easy Installation**: Simple setup process
+- 🚀 **Optimized Performance**: Efficient VAE encoding/decoding with FLUX
 
-```text
-ComfyUI/
-  models/
-    checkpoints/
-      flux1-dev.safetensors
-    loras/
-      OmniX_text_to_pano_rgb_comfyui.safetensors
-      OmniX_rgb_to_depth_comfyui.safetensors
-      OmniX_rgb_to_normal_comfyui.safetensors
-      OmniX_rgb_to_albedo_comfyui.safetensors
-      OmniX_rgb_to_pbr_comfyui.safetensors
-      OmniX_rgb_to_semantic_comfyui.safetensors
+---
+
+## Installation
+
+### Step 1: Install ComfyUI-OmniX
+
+Navigate to your ComfyUI custom nodes directory and clone this repository:
+
+```bash
+cd ComfyUI/custom_nodes/
+git clone https://github.com/cedarconnor/ComfyUI-OmniX.git
+cd ComfyUI-OmniX
 ```
 
-The LoRAs should already be converted from Diffusers/PEFT format into native Comfy FLUX LoRA format (key names like `lora_unet_double_blocks_*`).
+### Step 2: Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+Most dependencies (torch, numpy, PIL) should already be installed with ComfyUI. This step ensures you have the additional packages needed for perception processing.
+
+### Step 3: Download FLUX.1-dev Base Model
+
+Download the FLUX.1-dev checkpoint and place it in:
+```
+ComfyUI/models/checkpoints/flux1-dev.safetensors
+```
+
+You can get it from:
+- HuggingFace: https://huggingface.co/black-forest-labs/FLUX.1-dev
+- Or use the model you already have
+
+### Step 4: Download and Convert OmniX LoRAs
+
+#### Option A: Download from HuggingFace
+
+```bash
+# Clone the OmniX model repository
+cd ~/models  # or your preferred location
+git lfs install
+git clone https://huggingface.co/KevinHuang/OmniX
+```
+
+#### Option B: Direct Download
+
+Download individual LoRA files from: https://huggingface.co/KevinHuang/OmniX/tree/main
+
+You need these files:
+- `lora_rgb_to_albedo/` (or `lora_rgb_to_albedo.safetensors`)
+- `lora_rgb_to_depth/`
+- `lora_rgb_to_normal/`
+- `lora_rgb_to_pbr/`
+- `lora_rgb_to_semantic/`
+- `lora_text_to_pano/` (for text → panorama generation)
+
+#### Convert LoRAs to ComfyUI Format
+
+```bash
+cd ComfyUI/custom_nodes/ComfyUI-OmniX
+
+python scripts/convert_loras.py \
+    --input ~/models/OmniX \
+    --output ~/ComfyUI/models/loras
+```
+
+This will create files like:
+- `OmniX_text_to_pano_comfyui.safetensors`
+- `OmniX_rgb_to_depth_comfyui.safetensors`
+- `OmniX_rgb_to_normal_comfyui.safetensors`
+- `OmniX_rgb_to_albedo_comfyui.safetensors`
+- `OmniX_rgb_to_pbr_comfyui.safetensors`
+- `OmniX_rgb_to_semantic_comfyui.safetensors`
+
+### Step 5: Restart ComfyUI
+
+Restart ComfyUI to load the new custom nodes. You should see **OmniX/Perception** category with four nodes:
+- OmniX Pano Perception: Depth
+- OmniX Pano Perception: Normal
+- OmniX Pano Perception: PBR
+- OmniX Pano Perception: Semantic
 
 ---
 
-## 4. Node Overview (High-Level)
+## Quick Start
 
-### 4.1. OmniX_PanoPerception_Depth
+### Generate a Panorama from Text
 
-- **Inputs**
-  - `model` – Flux model + `rgb_to_depth` LoRA
-  - `pano_latent` – pano latent from `VAEEncode`
-  - `normalize_output` – whether to normalize for preview
+1. **Load Checkpoint** → `flux1-dev.safetensors`
+2. **Load LoRA** → `OmniX_text_to_pano_comfyui.safetensors` (strength: 1.0)
+3. **CLIP Text Encode** → `"a photorealistic 360° panorama of a cozy modern living room, equirectangular, 8k"`
+4. **Empty Latent Image** → Width: 2048, Height: 1024
+5. **KSampler** → Steps: 28, CFG: 3.5
+6. **VAE Decode** → Preview your panorama!
 
-- **Outputs**
-  - `depth_img` – depth visualization as an IMAGE (float 0–1)
+### Extract Depth from Panorama
 
-### 4.2. OmniX_PanoPerception_Normal
+1. **Load Image** → Your panorama
+2. **VAE Encode** → Encode to latent
+3. **Load Checkpoint** → `flux1-dev.safetensors`
+4. **Load LoRA** → `OmniX_rgb_to_depth_comfyui.safetensors`
+5. **KSampler** → With panorama latent as conditioning
+6. **OmniX Pano Perception: Depth** → Process and visualize depth
+   - Enable colorize for better visualization
+7. **Preview Image** → See your depth map!
 
-- **Inputs**
-  - `model` – Flux model + `rgb_to_normal` LoRA
-  - `pano_latent`
-  - `normalize_output`
-
-- **Outputs**
-  - `normal_img` – RGB normal map IMAGE
-
-### 4.3. OmniX_PanoPerception_PBR
-
-- **Inputs**
-  - `model` – Flux model + `rgb_to_pbr` LoRA
-  - `pano_latent`
-  - `normalize_output`
-
-- **Outputs**
-  - `albedo_img`, `roughness_img`, `metallic_img` – PBR maps as IMAGEs
-
-### 4.4. OmniX_PanoPerception_Semantic
-
-- **Inputs**
-  - `model` – Flux model + `rgb_to_semantic` LoRA
-  - `pano_latent`
-  - `palette` (future option)
-
-- **Outputs**
-  - `semantic_img` – colorized semantic segmentation IMAGE
-
-For detailed behavior and data flow, see `design_doc_omnix_comfyui.md`.
+For detailed workflow guides, see [examples/WORKFLOWS.md](examples/WORKFLOWS.md)
 
 ---
 
-## 5. Quickstart Workflows
+## Node Reference
 
-### 5.1. Text → Pano
+### OmniX Pano Perception: Depth
 
-Use standard Flux nodes plus your `text_to_pano` LoRA:
+Extracts and visualizes depth maps from panoramic images.
 
-1. `CLIPTextEncode` / `CLIPTextEncode` (neg)
-2. `EmptyLatentImage` with 2:1 resolution (e.g., 1024×2048)
-3. `Load Diffusion Model` → Flux dev
-4. `LoraLoaderModelOnly` → apply `OmniX_text_to_pano_rgb_comfyui.safetensors`
-5. `KSampler` → sample the pano latent
-6. `VAEDecode` → `pano_rgb`
+**Inputs:**
+- `vae` (VAE): VAE model for decoding latents
+- `samples` (LATENT): Output from KSampler with depth LoRA
+- `normalize` (BOOLEAN): Normalize depth to [0, 1] range (default: True)
+- `colorize` (BOOLEAN): Apply colormap for visualization (default: False)
+- `colormap` (ENUM): Colormap to use - `inferno`, `viridis`, `plasma`, `turbo`, `gray`
 
-### 5.2. Pano → Perception
+**Outputs:**
+- `depth_img` (IMAGE): Depth visualization
 
-1. Feed `pano_rgb` into `VAEEncode` → `pano_latent`.
-2. Load Flux dev again (or reuse the same model).
-3. Apply the relevant OmniX perception LoRA with `LoraLoaderModelOnly`.
-4. Feed the result into the corresponding `OmniX_PanoPerception_*` node(s).
-5. Connect outputs to `PreviewImage` or `ImageSave`.
+### OmniX Pano Perception: Normal
 
-### 5.3. Full Pipeline
+Extracts and visualizes surface normals from panoramic images.
 
-Just chain the above:
+**Inputs:**
+- `vae` (VAE): VAE model for decoding
+- `samples` (LATENT): Output from KSampler with normal LoRA
+- `normalize_vectors` (BOOLEAN): Normalize normal vectors to unit length (default: True)
+- `output_format` (ENUM): `rgb` or `normalized`
 
-- Text → Pano → VAEEncode → multiple `OmniX_PanoPerception_*` nodes in parallel.
+**Outputs:**
+- `normal_img` (IMAGE): Normal map visualization (RGB encoding of XYZ normals)
+
+### OmniX Pano Perception: PBR
+
+Extracts PBR material properties from panoramic images.
+
+**Inputs:**
+- `vae` (VAE): VAE model for decoding
+- `samples` (LATENT): Output from KSampler with PBR LoRA
+- `normalize_maps` (BOOLEAN): Normalize each map to [0, 1] (default: True)
+
+**Outputs:**
+- `albedo_img` (IMAGE): Albedo/diffuse color map
+- `roughness_img` (IMAGE): Surface roughness map
+- `metallic_img` (IMAGE): Metallic property map
+
+### OmniX Pano Perception: Semantic
+
+Extracts semantic segmentation from panoramic images.
+
+**Inputs:**
+- `vae` (VAE): VAE model for decoding
+- `samples` (LATENT): Output from KSampler with semantic LoRA
+- `palette` (ENUM): Color palette - `ade20k`, `cityscapes`, `custom`
+- `num_classes` (INT): Number of semantic classes (default: 16)
+
+**Outputs:**
+- `semantic_img` (IMAGE): Colorized semantic segmentation map
 
 ---
 
-## 6. Wiring in the Real OmniX Logic
+## Workflows
 
-Right now, the `omni_x_nodes.py` file contains placeholder logic so it is safe to import in Comfy and won’t crash your workspace. To actually get **real** depth / normal / PBR / semantic maps:
+Three main workflow patterns are supported:
 
-1. Copy or port the relevant code from the OmniX repo (`run_pano_perception.py` and helpers) into `omni_x_utils.py`.
-2. Replace the placeholder tensor generation inside each node’s `run` method with calls into your `omni_x_utils` functions.
-3. Validate your results against the original OmniX scripts using a fixed test pano and comparing outputs.
+### W1: Text → Panorama
+Generate 360° panoramas from text descriptions.
 
-You can follow the implementation plan in `design_doc_omnix_comfyui.md` for more structure.
+### W2: Panorama → Perception
+Extract depth, normals, PBR, or semantics from existing panoramas.
+
+### W3: Text → Panorama → Perception
+Full pipeline from text prompt to perception outputs.
+
+See detailed workflow guides in [examples/WORKFLOWS.md](examples/WORKFLOWS.md)
 
 ---
 
-## 7. License / Credits
+## Documentation
 
-- OmniX research and original code belong to the OmniX / HKU-MMLab authors.
-- This ComfyUI node pack is just a thin integration layer.
-- FLUX belongs to Black Forest Labs.
+- **[Design Document](design_doc.md)**: Technical architecture and implementation details
+- **[Agent Roles](agents.md)**: Development workflow and maintenance roles
+- **[Workflow Examples](examples/WORKFLOWS.md)**: Detailed workflow building guides
+- **[Script Documentation](scripts/README.md)**: LoRA conversion and utilities
 
-Be sure to respect all licenses and usage restrictions for the underlying models and code.
+---
+
+## Tips & Best Practices
+
+### Prompting for Panoramas
+
+- Include keywords: `360°`, `panoramic`, `equirectangular`
+- Specify scene type: `interior`, `outdoor`, `studio`
+- Add quality modifiers: `8k`, `highly detailed`, `photorealistic`
+- Use negative prompts: `blurry, distorted, low quality`
+
+### Resolution Recommendations
+
+- **Standard**: 1024 × 2048 (good balance of quality and speed)
+- **High Quality**: 1536 × 3072 (requires more VRAM)
+- **Maximum**: 2048 × 4096 (very high VRAM usage)
+
+Always maintain 1:2 aspect ratio for proper equirectangular format.
+
+### Performance Optimization
+
+- **Enable CPU offload** if running low on VRAM
+- **Process perception tasks sequentially** rather than parallel if memory-constrained
+- **Use lower resolution** for testing, then upscale final outputs
+- **Clear VRAM** between different perception types
+
+### Output Quality
+
+- **Depth**: Enable colorization for easier interpretation
+- **Normals**: Use `normalize_vectors` for physically accurate results
+- **PBR**: Results work best with well-lit panoramas
+- **Semantic**: Custom palette provides most distinct class colors
+
+---
+
+## Troubleshooting
+
+### Nodes Don't Appear in ComfyUI
+
+1. Check that `__init__.py` exists in the node directory
+2. Look for import errors in ComfyUI console
+3. Ensure all dependencies are installed
+4. Restart ComfyUI completely
+
+### LoRAs Not Found
+
+1. Verify LoRAs are in `ComfyUI/models/loras/`
+2. Check filenames match exactly (case-sensitive)
+3. Try refreshing the node list (F5 in browser)
+4. Restart ComfyUI
+
+### Out of Memory Errors
+
+1. Reduce panorama resolution
+2. Enable model CPU offloading
+3. Process one perception type at a time
+4. Close other GPU applications
+
+### Poor Quality Outputs
+
+1. Increase KSampler steps (try 40-50)
+2. Adjust CFG scale (3.0-5.0 range)
+3. Ensure correct LoRA is loaded for each task
+4. Try different seeds
+5. Check input panorama quality
+
+### Seams in Panoramas
+
+Equirectangular images naturally have a seam where left meets right. OmniX includes blending to minimize this, but some seams may be visible. Post-process in external software if needed.
+
+---
+
+## Architecture
+
+ComfyUI-OmniX follows a clean, modular architecture:
+
+```
+ComfyUI-OmniX/
+├── __init__.py              # Node registration
+├── omni_x_nodes.py          # Node implementations
+├── omni_x_utils.py          # Core perception utilities
+├── requirements.txt         # Dependencies
+├── design_doc.md            # Technical specification
+├── agents.md                # Development workflow
+├── scripts/
+│   ├── convert_loras.py     # LoRA conversion tool
+│   └── README.md            # Script documentation
+└── examples/
+    └── WORKFLOWS.md         # Workflow guides
+```
+
+### Key Design Principles
+
+1. **Separation of Concerns**: Nodes handle I/O, utilities handle processing
+2. **ComfyUI Native**: Works with standard ComfyUI node patterns
+3. **Modular**: Each perception type is independent
+4. **Extensible**: Easy to add new perception modes
+
+---
+
+## Limitations
+
+- **FLUX.1-dev Only**: Currently only supports FLUX.1-dev base model
+- **Equirectangular Format**: Designed for 1:2 aspect ratio panoramas
+- **LoRA Required**: Each perception type requires its specific LoRA
+- **GPU Memory**: High-resolution panoramas require significant VRAM
+
+---
+
+## Credits
+
+- **OmniX**: Original research and models by HKU-MMLab
+  - Paper: [OmniX: Omni-Directional Panoramic Generation and Perception](https://github.com/HKU-MMLab/OmniX)
+  - Models: https://huggingface.co/KevinHuang/OmniX
+- **FLUX.1**: Base diffusion model by Black Forest Labs
+- **ComfyUI**: Node-based interface by comfyanonymous
+
+---
+
+## License
+
+This node pack is a community integration layer. Please respect:
+- OmniX original license and usage terms
+- FLUX.1-dev license and restrictions
+- ComfyUI license
+
+See individual component repositories for specific license details.
+
+---
+
+## Contributing
+
+Contributions are welcome! Areas for improvement:
+
+- Additional perception modes (relighting, 3D reconstruction)
+- Workflow templates and examples
+- Performance optimizations
+- Documentation improvements
+
+---
+
+## Support
+
+- **Issues**: Report bugs or request features via GitHub Issues
+- **Discussions**: Share workflows and tips in GitHub Discussions
+- **OmniX**: For questions about the underlying models, see the [OmniX repository](https://github.com/HKU-MMLab/OmniX)
+
+---
+
+## Changelog
+
+### v0.1.0 (Initial Release)
+
+- ✨ Initial implementation of four perception nodes
+- 📦 LoRA conversion script
+- 📚 Complete documentation and workflow guides
+- 🎨 Support for depth, normal, PBR, and semantic perception
+
+---
+
+<div align="center">
+
+**Made with ❤️ for the ComfyUI community**
+
+[Report Bug](https://github.com/cedarconnor/ComfyUI-OmniX/issues) · [Request Feature](https://github.com/cedarconnor/ComfyUI-OmniX/issues) · [Documentation](examples/WORKFLOWS.md)
+
+</div>

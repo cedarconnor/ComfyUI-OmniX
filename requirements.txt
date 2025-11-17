@@ -1,0 +1,30 @@
+# ComfyUI-OmniX Dependencies
+# These are required for the OmniX perception nodes to function
+
+# Core ML frameworks (usually already installed with ComfyUI)
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Diffusion and transformer models
+diffusers>=0.32.0
+transformers>=4.48.0
+peft>=0.12.0
+
+# Numerical and scientific computing
+numpy>=1.24.0
+scipy>=1.13.0
+einops>=0.8.0
+
+# Image processing
+pillow>=9.0.0
+opencv-python>=4.8.0
+
+# Safetensors for model loading
+safetensors>=0.4.0
+
+# Optional: For super-resolution (albedo upsampling)
+# basicsr>=1.4.2
+# realesrgan>=0.3.0
+
+# Optional: For 3D mesh operations (future extensions)
+# open3d>=0.18.0
