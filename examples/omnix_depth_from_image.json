@@ -1,0 +1,224 @@
+{
+  "last_node_id": 12,
+  "last_link_id": 14,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadImage",
+      "pos": [50, 150],
+      "size": {"0": 315, "1": 314},
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "outputs": [
+        {"name": "IMAGE", "type": "IMAGE", "links": [1, 2], "slot_index": 0},
+        {"name": "MASK", "type": "MASK", "links": null}
+      ],
+      "properties": {"Node name for S&R": "LoadImage"},
+      "widgets_values": ["panorama.png", "image"]
+    },
+    {
+      "id": 2,
+      "type": "CheckpointLoaderSimple",
+      "pos": [50, 550],
+      "size": {"0": 315, "1": 98},
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "outputs": [
+        {"name": "MODEL", "type": "MODEL", "links": [3], "slot_index": 0},
+        {"name": "CLIP", "type": "CLIP", "links": [4, 5], "slot_index": 1},
+        {"name": "VAE", "type": "VAE", "links": [6, 7], "slot_index": 2}
+      ],
+      "properties": {"Node name for S&R": "CheckpointLoaderSimple"},
+      "widgets_values": ["flux1-dev.safetensors"]
+    },
+    {
+      "id": 3,
+      "type": "LoraLoader",
+      "pos": [400, 550],
+      "size": {"0": 315, "1": 126},
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {"name": "model", "type": "MODEL", "link": 3},
+        {"name": "clip", "type": "CLIP", "link": 4}
+      ],
+      "outputs": [
+        {"name": "MODEL", "type": "MODEL", "links": [8], "slot_index": 0},
+        {"name": "CLIP", "type": "CLIP", "links": [9, 10], "slot_index": 1}
+      ],
+      "properties": {"Node name for S&R": "LoraLoader"},
+      "widgets_values": ["OmniX_rgb_to_depth_comfyui.safetensors", 1.0, 1.0]
+    },
+    {
+      "id": 4,
+      "type": "CLIPTextEncode",
+      "pos": [750, 550],
+      "size": {"0": 400, "1": 200},
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [{"name": "clip", "type": "CLIP", "link": 9}],
+      "outputs": [
+        {"name": "CONDITIONING", "type": "CONDITIONING", "links": [11], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": ["depth map, metric depth"]
+    },
+    {
+      "id": 5,
+      "type": "CLIPTextEncode",
+      "pos": [750, 800],
+      "size": {"0": 400, "1": 200},
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [{"name": "clip", "type": "CLIP", "link": 10}],
+      "outputs": [
+        {"name": "CONDITIONING", "type": "CONDITIONING", "links": [12], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": ["blurry, noisy, artifacts"]
+    },
+    {
+      "id": 6,
+      "type": "VAEEncode",
+      "pos": [400, 150],
+      "size": {"0": 210, "1": 46},
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {"name": "pixels", "type": "IMAGE", "link": 1},
+        {"name": "vae", "type": "VAE", "link": 6}
+      ],
+      "outputs": [
+        {"name": "LATENT", "type": "LATENT", "links": [13], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "VAEEncode"}
+    },
+    {
+      "id": 7,
+      "type": "KSampler",
+      "pos": [1200, 550],
+      "size": {"0": 315, "1": 262},
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {"name": "model", "type": "MODEL", "link": 8},
+        {"name": "positive", "type": "CONDITIONING", "link": 11},
+        {"name": "negative", "type": "CONDITIONING", "link": 12},
+        {"name": "latent_image", "type": "LATENT", "link": 13}
+      ],
+      "outputs": [
+        {"name": "LATENT", "type": "LATENT", "links": [14], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "KSampler"},
+      "widgets_values": [42, "fixed", 28, 3.5, "euler", "normal", 1.0]
+    },
+    {
+      "id": 8,
+      "type": "OmniX_PanoPerception_Depth",
+      "pos": [1550, 550],
+      "size": {"0": 315, "1": 150},
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {"name": "vae", "type": "VAE", "link": 7},
+        {"name": "samples", "type": "LATENT", "link": 14}
+      ],
+      "outputs": [
+        {"name": "depth_img", "type": "IMAGE", "links": [15], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "OmniX_PanoPerception_Depth"},
+      "widgets_values": [true, true, "inferno"]
+    },
+    {
+      "id": 9,
+      "type": "PreviewImage",
+      "pos": [400, 250],
+      "size": {"0": 400, "1": 250},
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [{"name": "images", "type": "IMAGE", "link": 2}],
+      "properties": {"Node name for S&R": "PreviewImage"}
+    },
+    {
+      "id": 10,
+      "type": "SaveImage",
+      "pos": [1900, 550],
+      "size": {"0": 315, "1": 270},
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [{"name": "images", "type": "IMAGE", "link": 15}],
+      "properties": {},
+      "widgets_values": ["omnix_depth"]
+    },
+    {
+      "id": 11,
+      "type": "Note",
+      "pos": [50, 50],
+      "size": {"0": 500, "1": 100},
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "properties": {"text": ""},
+      "widgets_values": ["OmniX Depth Extraction from Existing Panorama\n\n1. Load your panorama image (should be equirectangular, 2:1 aspect ratio)\n2. The workflow will extract and colorize the depth map automatically"],
+      "color": "#233",
+      "bgcolor": "#355"
+    },
+    {
+      "id": 12,
+      "type": "Note",
+      "pos": [1550, 750],
+      "size": {"0": 400, "1": 150},
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "properties": {"text": ""},
+      "widgets_values": ["OmniX Depth Node Settings:\n\n- normalize: Normalizes depth to [0,1] range\n- colorize: Applies color gradient for better visualization\n- colormap: Choose from inferno, viridis, plasma, turbo, or gray\n\nTry different colormaps to find what works best for your scene!"],
+      "color": "#432",
+      "bgcolor": "#653"
+    }
+  ],
+  "links": [
+    [1, 1, 0, 6, 0, "IMAGE"],
+    [2, 1, 0, 9, 0, "IMAGE"],
+    [3, 2, 0, 3, 0, "MODEL"],
+    [4, 2, 1, 3, 1, "CLIP"],
+    [5, 2, 1, 5, 0, "CLIP"],
+    [6, 2, 2, 6, 1, "VAE"],
+    [7, 2, 2, 8, 0, "VAE"],
+    [8, 3, 0, 7, 0, "MODEL"],
+    [9, 3, 1, 4, 0, "CLIP"],
+    [10, 3, 1, 5, 0, "CLIP"],
+    [11, 4, 0, 7, 1, "CONDITIONING"],
+    [12, 5, 0, 7, 2, "CONDITIONING"],
+    [13, 6, 0, 7, 3, "LATENT"],
+    [14, 7, 0, 8, 1, "LATENT"],
+    [15, 8, 0, 10, 0, "IMAGE"]
+  ],
+  "groups": [
+    {
+      "title": "Input Panorama",
+      "bounding": [25, 125, 800, 400],
+      "color": "#3f789e",
+      "font_size": 24
+    },
+    {
+      "title": "Depth Extraction",
+      "bounding": [25, 525, 2200, 500],
+      "color": "#8A5A2B",
+      "font_size": 24
+    }
+  ],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}
