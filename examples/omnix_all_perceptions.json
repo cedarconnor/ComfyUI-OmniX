@@ -1,0 +1,474 @@
+{
+  "last_node_id": 25,
+  "last_link_id": 40,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadImage",
+      "pos": [50, 150],
+      "size": {"0": 315, "1": 314},
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "outputs": [
+        {"name": "IMAGE", "type": "IMAGE", "links": [1, 2], "slot_index": 0},
+        {"name": "MASK", "type": "MASK", "links": null}
+      ],
+      "properties": {"Node name for S&R": "LoadImage"},
+      "widgets_values": ["panorama.png", "image"]
+    },
+    {
+      "id": 2,
+      "type": "CheckpointLoaderSimple",
+      "pos": [50, 550],
+      "size": {"0": 315, "1": 98},
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "outputs": [
+        {"name": "MODEL", "type": "MODEL", "links": [3, 4, 5, 6], "slot_index": 0},
+        {"name": "CLIP", "type": "CLIP", "links": [7, 8, 9, 10], "slot_index": 1},
+        {"name": "VAE", "type": "VAE", "links": [11, 12, 13, 14, 15], "slot_index": 2}
+      ],
+      "properties": {"Node name for S&R": "CheckpointLoaderSimple"},
+      "widgets_values": ["flux1-dev.safetensors"]
+    },
+    {
+      "id": 3,
+      "type": "VAEEncode",
+      "pos": [400, 150],
+      "size": {"0": 210, "1": 46},
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {"name": "pixels", "type": "IMAGE", "link": 1},
+        {"name": "vae", "type": "VAE", "link": 11}
+      ],
+      "outputs": [
+        {"name": "LATENT", "type": "LATENT", "links": [16, 17, 18, 19], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "VAEEncode"}
+    },
+    {
+      "id": 4,
+      "type": "PreviewImage",
+      "pos": [650, 150],
+      "size": {"0": 400, "1": 250},
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [{"name": "images", "type": "IMAGE", "link": 2}],
+      "properties": {"Node name for S&R": "PreviewImage"}
+    },
+    {
+      "id": 5,
+      "type": "LoraLoader",
+      "pos": [400, 700],
+      "size": {"0": 315, "1": 126},
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {"name": "model", "type": "MODEL", "link": 3},
+        {"name": "clip", "type": "CLIP", "link": 7}
+      ],
+      "outputs": [
+        {"name": "MODEL", "type": "MODEL", "links": [20], "slot_index": 0},
+        {"name": "CLIP", "type": "CLIP", "links": [21, 22], "slot_index": 1}
+      ],
+      "properties": {"Node name for S&R": "LoraLoader"},
+      "widgets_values": ["OmniX_rgb_to_depth_comfyui.safetensors", 1.0, 1.0]
+    },
+    {
+      "id": 6,
+      "type": "CLIPTextEncode",
+      "pos": [750, 700],
+      "size": {"0": 300, "1": 100},
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [{"name": "clip", "type": "CLIP", "link": 21}],
+      "outputs": [
+        {"name": "CONDITIONING", "type": "CONDITIONING", "links": [23], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": ["depth map"]
+    },
+    {
+      "id": 7,
+      "type": "CLIPTextEncode",
+      "pos": [750, 850],
+      "size": {"0": 300, "1": 100},
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [{"name": "clip", "type": "CLIP", "link": 22}],
+      "outputs": [
+        {"name": "CONDITIONING", "type": "CONDITIONING", "links": [24], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": [""]
+    },
+    {
+      "id": 8,
+      "type": "KSampler",
+      "pos": [1100, 700],
+      "size": {"0": 315, "1": 262},
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {"name": "model", "type": "MODEL", "link": 20},
+        {"name": "positive", "type": "CONDITIONING", "link": 23},
+        {"name": "negative", "type": "CONDITIONING", "link": 24},
+        {"name": "latent_image", "type": "LATENT", "link": 16}
+      ],
+      "outputs": [
+        {"name": "LATENT", "type": "LATENT", "links": [25], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "KSampler"},
+      "widgets_values": [42, "fixed", 28, 3.5, "euler", "normal", 1.0]
+    },
+    {
+      "id": 9,
+      "type": "OmniX_PanoPerception_Depth",
+      "pos": [1450, 700],
+      "size": {"0": 315, "1": 150},
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {"name": "vae", "type": "VAE", "link": 12},
+        {"name": "samples", "type": "LATENT", "link": 25}
+      ],
+      "outputs": [
+        {"name": "depth_img", "type": "IMAGE", "links": [26], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "OmniX_PanoPerception_Depth"},
+      "widgets_values": [true, true, "inferno"]
+    },
+    {
+      "id": 10,
+      "type": "SaveImage",
+      "pos": [1800, 700],
+      "size": {"0": 315, "1": 270},
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [{"name": "images", "type": "IMAGE", "link": 26}],
+      "properties": {},
+      "widgets_values": ["omnix_depth"]
+    },
+    {
+      "id": 11,
+      "type": "LoraLoader",
+      "pos": [400, 1100],
+      "size": {"0": 315, "1": 126},
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {"name": "model", "type": "MODEL", "link": 4},
+        {"name": "clip", "type": "CLIP", "link": 8}
+      ],
+      "outputs": [
+        {"name": "MODEL", "type": "MODEL", "links": [27], "slot_index": 0},
+        {"name": "CLIP", "type": "CLIP", "links": [28, 29], "slot_index": 1}
+      ],
+      "properties": {"Node name for S&R": "LoraLoader"},
+      "widgets_values": ["OmniX_rgb_to_normal_comfyui.safetensors", 1.0, 1.0]
+    },
+    {
+      "id": 12,
+      "type": "CLIPTextEncode",
+      "pos": [750, 1100],
+      "size": {"0": 300, "1": 100},
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [{"name": "clip", "type": "CLIP", "link": 28}],
+      "outputs": [
+        {"name": "CONDITIONING", "type": "CONDITIONING", "links": [30], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": ["surface normals"]
+    },
+    {
+      "id": 13,
+      "type": "CLIPTextEncode",
+      "pos": [750, 1250],
+      "size": {"0": 300, "1": 100},
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [{"name": "clip", "type": "CLIP", "link": 29}],
+      "outputs": [
+        {"name": "CONDITIONING", "type": "CONDITIONING", "links": [31], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": [""]
+    },
+    {
+      "id": 14,
+      "type": "KSampler",
+      "pos": [1100, 1100],
+      "size": {"0": 315, "1": 262},
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {"name": "model", "type": "MODEL", "link": 27},
+        {"name": "positive", "type": "CONDITIONING", "link": 30},
+        {"name": "negative", "type": "CONDITIONING", "link": 31},
+        {"name": "latent_image", "type": "LATENT", "link": 17}
+      ],
+      "outputs": [
+        {"name": "LATENT", "type": "LATENT", "links": [32], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "KSampler"},
+      "widgets_values": [42, "fixed", 28, 3.5, "euler", "normal", 1.0]
+    },
+    {
+      "id": 15,
+      "type": "OmniX_PanoPerception_Normal",
+      "pos": [1450, 1100],
+      "size": {"0": 315, "1": 126},
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {"name": "vae", "type": "VAE", "link": 13},
+        {"name": "samples", "type": "LATENT", "link": 32}
+      ],
+      "outputs": [
+        {"name": "normal_img", "type": "IMAGE", "links": [33], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "OmniX_PanoPerception_Normal"},
+      "widgets_values": [true, "rgb"]
+    },
+    {
+      "id": 16,
+      "type": "SaveImage",
+      "pos": [1800, 1100],
+      "size": {"0": 315, "1": 270},
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [{"name": "images", "type": "IMAGE", "link": 33}],
+      "properties": {},
+      "widgets_values": ["omnix_normal"]
+    },
+    {
+      "id": 17,
+      "type": "LoraLoader",
+      "pos": [400, 1500],
+      "size": {"0": 315, "1": 126},
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {"name": "model", "type": "MODEL", "link": 5},
+        {"name": "clip", "type": "CLIP", "link": 9}
+      ],
+      "outputs": [
+        {"name": "MODEL", "type": "MODEL", "links": [34], "slot_index": 0},
+        {"name": "CLIP", "type": "CLIP", "links": [35, 36], "slot_index": 1}
+      ],
+      "properties": {"Node name for S&R": "LoraLoader"},
+      "widgets_values": ["OmniX_rgb_to_pbr_comfyui.safetensors", 1.0, 1.0]
+    },
+    {
+      "id": 18,
+      "type": "CLIPTextEncode",
+      "pos": [750, 1500],
+      "size": {"0": 300, "1": 100},
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [{"name": "clip", "type": "CLIP", "link": 35}],
+      "outputs": [
+        {"name": "CONDITIONING", "type": "CONDITIONING", "links": [37], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": ["PBR materials"]
+    },
+    {
+      "id": 19,
+      "type": "CLIPTextEncode",
+      "pos": [750, 1650],
+      "size": {"0": 300, "1": 100},
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [{"name": "clip", "type": "CLIP", "link": 36}],
+      "outputs": [
+        {"name": "CONDITIONING", "type": "CONDITIONING", "links": [38], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": [""]
+    },
+    {
+      "id": 20,
+      "type": "KSampler",
+      "pos": [1100, 1500],
+      "size": {"0": 315, "1": 262},
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {"name": "model", "type": "MODEL", "link": 34},
+        {"name": "positive", "type": "CONDITIONING", "link": 37},
+        {"name": "negative", "type": "CONDITIONING", "link": 38},
+        {"name": "latent_image", "type": "LATENT", "link": 18}
+      ],
+      "outputs": [
+        {"name": "LATENT", "type": "LATENT", "links": [39], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "KSampler"},
+      "widgets_values": [42, "fixed", 28, 3.5, "euler", "normal", 1.0]
+    },
+    {
+      "id": 21,
+      "type": "OmniX_PanoPerception_PBR",
+      "pos": [1450, 1500],
+      "size": {"0": 315, "1": 106},
+      "flags": {},
+      "order": 20,
+      "mode": 0,
+      "inputs": [
+        {"name": "vae", "type": "VAE", "link": 14},
+        {"name": "samples", "type": "LATENT", "link": 39}
+      ],
+      "outputs": [
+        {"name": "albedo_img", "type": "IMAGE", "links": [40], "slot_index": 0},
+        {"name": "roughness_img", "type": "IMAGE", "links": [41], "slot_index": 1},
+        {"name": "metallic_img", "type": "IMAGE", "links": [42], "slot_index": 2}
+      ],
+      "properties": {"Node name for S&R": "OmniX_PanoPerception_PBR"},
+      "widgets_values": [true]
+    },
+    {
+      "id": 22,
+      "type": "SaveImage",
+      "pos": [1800, 1500],
+      "size": {"0": 315, "1": 270},
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [{"name": "images", "type": "IMAGE", "link": 40}],
+      "properties": {},
+      "widgets_values": ["omnix_albedo"]
+    },
+    {
+      "id": 23,
+      "type": "SaveImage",
+      "pos": [2150, 1500],
+      "size": {"0": 315, "1": 270},
+      "flags": {},
+      "order": 22,
+      "mode": 0,
+      "inputs": [{"name": "images", "type": "IMAGE", "link": 41}],
+      "properties": {},
+      "widgets_values": ["omnix_roughness"]
+    },
+    {
+      "id": 24,
+      "type": "SaveImage",
+      "pos": [2500, 1500],
+      "size": {"0": 315, "1": 270},
+      "flags": {},
+      "order": 23,
+      "mode": 0,
+      "inputs": [{"name": "images", "type": "IMAGE", "link": 42}],
+      "properties": {},
+      "widgets_values": ["omnix_metallic"]
+    },
+    {
+      "id": 25,
+      "type": "Note",
+      "pos": [50, 50],
+      "size": {"0": 600, "1": 100},
+      "flags": {},
+      "order": 24,
+      "mode": 0,
+      "properties": {"text": ""},
+      "widgets_values": ["OmniX All Perceptions Workflow\n\nThis workflow extracts ALL perception outputs from a single panorama:\n- Depth (colorized)\n- Surface Normals (RGB visualization)\n- PBR Materials (Albedo, Roughness, Metallic)\n\nLoad your panorama and queue the prompt. All outputs will be generated in parallel."],
+      "color": "#233",
+      "bgcolor": "#355"
+    }
+  ],
+  "links": [
+    [1, 1, 0, 3, 0, "IMAGE"],
+    [2, 1, 0, 4, 0, "IMAGE"],
+    [3, 2, 0, 5, 0, "MODEL"],
+    [4, 2, 0, 11, 0, "MODEL"],
+    [5, 2, 0, 17, 0, "MODEL"],
+    [6, 2, 0, 5, 0, "MODEL"],
+    [7, 2, 1, 5, 1, "CLIP"],
+    [8, 2, 1, 11, 1, "CLIP"],
+    [9, 2, 1, 17, 1, "CLIP"],
+    [10, 2, 1, 5, 1, "CLIP"],
+    [11, 2, 2, 3, 1, "VAE"],
+    [12, 2, 2, 9, 0, "VAE"],
+    [13, 2, 2, 15, 0, "VAE"],
+    [14, 2, 2, 21, 0, "VAE"],
+    [15, 2, 2, 3, 1, "VAE"],
+    [16, 3, 0, 8, 3, "LATENT"],
+    [17, 3, 0, 14, 3, "LATENT"],
+    [18, 3, 0, 20, 3, "LATENT"],
+    [19, 3, 0, 8, 3, "LATENT"],
+    [20, 5, 0, 8, 0, "MODEL"],
+    [21, 5, 1, 6, 0, "CLIP"],
+    [22, 5, 1, 7, 0, "CLIP"],
+    [23, 6, 0, 8, 1, "CONDITIONING"],
+    [24, 7, 0, 8, 2, "CONDITIONING"],
+    [25, 8, 0, 9, 1, "LATENT"],
+    [26, 9, 0, 10, 0, "IMAGE"],
+    [27, 11, 0, 14, 0, "MODEL"],
+    [28, 11, 1, 12, 0, "CLIP"],
+    [29, 11, 1, 13, 0, "CLIP"],
+    [30, 12, 0, 14, 1, "CONDITIONING"],
+    [31, 13, 0, 14, 2, "CONDITIONING"],
+    [32, 14, 0, 15, 1, "LATENT"],
+    [33, 15, 0, 16, 0, "IMAGE"],
+    [34, 17, 0, 20, 0, "MODEL"],
+    [35, 17, 1, 18, 0, "CLIP"],
+    [36, 17, 1, 19, 0, "CLIP"],
+    [37, 18, 0, 20, 1, "CONDITIONING"],
+    [38, 19, 0, 20, 2, "CONDITIONING"],
+    [39, 20, 0, 21, 1, "LATENT"],
+    [40, 21, 0, 22, 0, "IMAGE"],
+    [41, 21, 1, 23, 0, "IMAGE"],
+    [42, 21, 2, 24, 0, "IMAGE"]
+  ],
+  "groups": [
+    {
+      "title": "Input Panorama",
+      "bounding": [25, 125, 1050, 400],
+      "color": "#3f789e",
+      "font_size": 24
+    },
+    {
+      "title": "Depth Perception",
+      "bounding": [25, 675, 2100, 325],
+      "color": "#8A5A2B",
+      "font_size": 24
+    },
+    {
+      "title": "Normal Perception",
+      "bounding": [25, 1075, 2100, 325],
+      "color": "#5A8A2B",
+      "font_size": 24
+    },
+    {
+      "title": "PBR Perception",
+      "bounding": [25, 1475, 2800, 325],
+      "color": "#8A2B5A",
+      "font_size": 24
+    }
+  ],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}
