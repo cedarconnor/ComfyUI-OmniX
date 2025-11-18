@@ -69,23 +69,23 @@ def verify_lora(state_dict: Dict[str, torch.Tensor], task_name: str) -> bool:
         True if valid, False otherwise
     """
     if not state_dict:
-        print(f"  ✗ Empty state dict for {task_name}")
+        print(f"  [X] Empty state dict for {task_name}")
         return False
 
     # Check for common LoRA patterns
     has_lora_keys = any('lora' in key.lower() for key in state_dict.keys())
     if not has_lora_keys:
-        print(f"  ⚠ Warning: No 'lora' keys found in {task_name}")
+        print(f"  [!] Warning: No 'lora' keys found in {task_name}")
 
     # Check tensor shapes are reasonable
     for key, tensor in state_dict.items():
         if tensor.ndim not in [1, 2, 3, 4]:
-            print(f"  ✗ Invalid tensor shape for {key}: {tensor.shape}")
+            print(f"  [X] Invalid tensor shape for {key}: {tensor.shape}")
             return False
 
-    print(f"  ✓ Found {len(state_dict)} parameters")
+    print(f"  [OK] Found {len(state_dict)} parameters")
     total_params = sum(p.numel() for p in state_dict.values())
-    print(f"  ✓ Total parameters: {total_params:,}")
+    print(f"  [OK] Total parameters: {total_params:,}")
 
     return True
 
@@ -107,12 +107,12 @@ def convert_omnix_lora(input_path: Path, output_path: Path, task_name: str):
     try:
         state_dict = load_file(str(input_path))
     except Exception as e:
-        print(f"  ✗ Failed to load: {e}")
+        print(f"  [X] Failed to load: {e}")
         return
 
     # Verify the LoRA
     if not verify_lora(state_dict, task_name):
-        print(f"  ✗ Verification failed for {task_name}")
+        print(f"  [X] Verification failed for {task_name}")
         return
 
     # Convert keys
@@ -122,9 +122,9 @@ def convert_omnix_lora(input_path: Path, output_path: Path, task_name: str):
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         save_file(converted, str(output_path))
-        print(f"  ✓ Saved successfully")
+        print(f"  [OK] Saved successfully")
     except Exception as e:
-        print(f"  ✗ Failed to save: {e}")
+        print(f"  [X] Failed to save: {e}")
         return
 
 
@@ -176,10 +176,11 @@ def main():
     for task in args.tasks:
         # Try different possible file patterns
         possible_names = [
+            f"{task}_rgb.safetensors",  # For tasks like text_to_pano_rgb
             f"lora_{task}.safetensors",
             f"OmniX_{task}.safetensors",
             f"{task}.safetensors",
-            f"lora_{task}_rgb.safetensors",  # For tasks like text_to_pano/rgb
+            f"lora_{task}_rgb.safetensors",  # For tasks like lora_text_to_pano_rgb
         ]
 
         input_path = None
@@ -200,7 +201,7 @@ def main():
                         break
 
         if not input_path:
-            print(f"\n⚠ Skipping {task}: LoRA file not found")
+            print(f"\n[!] Skipping {task}: LoRA file not found")
             print(f"  Searched for: {', '.join(possible_names)}")
             continue
 
