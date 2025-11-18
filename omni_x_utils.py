@@ -26,13 +26,17 @@ class FluxVAEHelper:
     FLUX uses specific shift and scaling factors for latent space:
     - Encoding: (latents - shift_factor) * scaling_factor
     - Decoding: (latents / scaling_factor) + shift_factor
+
+    Note: ComfyUI's VAE object doesn't expose config, so we use
+    hardcoded FLUX.1 values.
     """
 
     def __init__(self, vae):
         self.vae = vae
-        # FLUX.1 VAE configuration
-        self.shift_factor = getattr(vae.config, 'shift_factor', 0.1159)
-        self.scaling_factor = getattr(vae.config, 'scaling_factor', 0.3611)
+        # FLUX.1 VAE hardcoded configuration values
+        # These are the standard values for FLUX.1-dev
+        self.shift_factor = 0.1159
+        self.scaling_factor = 0.3611
 
     def encode(self, images: torch.Tensor) -> torch.Tensor:
         """
@@ -45,7 +49,8 @@ class FluxVAEHelper:
             Latents of shape (B, 16, H//8, W//8)
         """
         with torch.no_grad():
-            latents = self.vae.encode(images).latent_dist.sample()
+            # ComfyUI's VAE.encode returns latents directly
+            latents = self.vae.encode(images)
             latents = (latents - self.shift_factor) * self.scaling_factor
         return latents
 
@@ -60,8 +65,10 @@ class FluxVAEHelper:
             Images of shape (B, C, H, W), normalized to [-1, 1]
         """
         with torch.no_grad():
+            # Reverse the scaling before decoding
             latents = (latents / self.scaling_factor) + self.shift_factor
-            images = self.vae.decode(latents).sample
+            # ComfyUI's VAE.decode returns images directly
+            images = self.vae.decode(latents)
         return images
 
 
