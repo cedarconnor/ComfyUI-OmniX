@@ -36,13 +36,14 @@ class FluxVAEHelper:
         Encode images to latents.
 
         Args:
-            images: Tensor of shape (B, C, H, W), normalized to [0, 1]
+            images: Tensor of shape (B, H, W, C) in [0, 1] (ComfyUI format)
 
         Returns:
             Latents of shape (B, 16, H//8, W//8)
         """
         with torch.no_grad():
-            # ComfyUI's VAE.encode returns latents in the correct scale
+            # ComfyUI expects images in (B, H, W, C) format
+            # VAE.encode returns latents in the correct scale
             # No additional scaling needed - KSampler expects these values as-is
             latents = self.vae.encode(images)
         return latents
@@ -55,12 +56,15 @@ class FluxVAEHelper:
             latents: Tensor of shape (B, 16, H//8, W//8)
 
         Returns:
-            Images of shape (B, C, H, W), normalized to [0, 1]
+            Images of shape (B, C, H, W) in [0, 1] (standard PyTorch format)
         """
         with torch.no_grad():
-            # ComfyUI's VAE.decode returns images in [0, 1] range
+            # ComfyUI's VAE.decode returns images in (B, H, W, C) format with [0, 1] range
             # No scaling needed - latents from KSampler are already in correct scale
             images = self.vae.decode(latents)
+
+            # Convert from ComfyUI format (B, H, W, C) to standard PyTorch format (B, C, H, W)
+            images = images.permute(0, 3, 1, 2)
         return images
 
 
