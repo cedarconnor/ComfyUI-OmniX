@@ -6,7 +6,6 @@ torch>=2.0.0
 torchvision>=0.15.0
 
 # Diffusion and transformer models
-diffusers>=0.32.0
 transformers>=4.48.0
 peft>=0.12.0
 

@@ -119,7 +119,7 @@ flowchart LR
   - `torch`
   - `safetensors`
   - `numpy`
-  - Optional: `diffusers`, `peft`, `nunchaku` for LoRA conversion scripts (not required at runtime)
+  - Optional: `peft`, `nunchaku` for LoRA conversion scripts (not required at runtime)
 
 ### 3.2. Model Assets
 

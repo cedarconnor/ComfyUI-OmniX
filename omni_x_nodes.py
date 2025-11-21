@@ -180,6 +180,8 @@ class OmniX_PanoPerception_Normal:
         processed_images = []
         for i in range(normals.shape[0]):
             # Get normal map (C, H, W) and transpose to (H, W, C)
+            if normals[i].shape[0] != 3:
+                raise ValueError(f"Expected 3 channels for normal map, got {normals[i].shape[0]}. Check your VAE and input latent.")
             normal_map = normals[i].permute(1, 2, 0).numpy()
 
             # At this point, normals are in [-1, 1] from VAE decode
