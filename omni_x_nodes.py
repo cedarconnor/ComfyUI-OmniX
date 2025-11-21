@@ -83,12 +83,11 @@ class OmniX_PanoPerception_Depth:
         vae_helper = utils.FluxVAEHelper(vae)
         decoded = vae_helper.decode(latent)
 
-        # Convert from (B, C, H, W) [-1, 1] to numpy
+        # Convert from (B, C, H, W) [0, 1] to numpy
         depth_raw = decoded.detach().cpu().float()
 
         # Take luminance as depth (average across RGB channels)
-        # Normalize to [0, 1] from [-1, 1]
-        depth_raw = (depth_raw + 1.0) / 2.0
+        # VAE already outputs [0, 1], no rescaling needed
         depth = depth_raw.mean(dim=1, keepdim=True)  # (B, 1, H, W)
 
         # Process each image in batch
@@ -184,7 +183,8 @@ class OmniX_PanoPerception_Normal:
                 raise ValueError(f"Expected 3 channels for normal map, got {normals[i].shape[0]}. Check your VAE and input latent.")
             normal_map = normals[i].permute(1, 2, 0).numpy()
 
-            # At this point, normals are in [-1, 1] from VAE decode
+            # VAE outputs [0, 1], convert to [-1, 1] for normal vectors
+            normal_map = normal_map * 2.0 - 1.0
 
             if normalize_vectors:
                 # Normalize to unit length
@@ -259,9 +259,8 @@ class OmniX_PanoPerception_PBR:
         vae_helper = utils.FluxVAEHelper(vae)
         decoded = vae_helper.decode(latent)
 
-        # decoded is (B, C, H, W) in [-1, 1]
-        # Normalize to [0, 1]
-        decoded = (decoded + 1.0) / 2.0
+        # decoded is (B, C, H, W) in [0, 1]
+        # VAE already outputs [0, 1], no rescaling needed
 
         # Split into PBR components
         # Note: The exact channel mapping depends on how the LoRA was trained
@@ -390,10 +389,9 @@ class OmniX_PanoPerception_Semantic:
             else:
                 # Single channel: quantize into bins
                 sem_channel = sem[0]  # (H, W)
-                # Normalize to [0, 1]
-                sem_norm = (sem_channel + 1.0) / 2.0
+                # VAE already outputs [0, 1], no rescaling needed
                 # Quantize into num_classes bins
-                class_ids = (sem_norm * num_classes).long().clamp(0, num_classes - 1).numpy()
+                class_ids = (sem_channel * num_classes).long().clamp(0, num_classes - 1).numpy()
 
             # Apply color palette
             colored = utils.apply_semantic_palette(class_ids, palette=palette)
