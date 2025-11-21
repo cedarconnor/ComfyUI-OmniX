@@ -21,53 +21,45 @@ import torch.nn.functional as F
 
 class FluxVAEHelper:
     """
-    Helper class for FLUX VAE encoding/decoding with proper scaling.
+    Helper class for FLUX VAE encoding/decoding.
 
-    FLUX uses specific shift and scaling factors for latent space:
-    - Encoding: (latents - shift_factor) * scaling_factor
-    - Decoding: (latents / scaling_factor) + shift_factor
-
-    Note: ComfyUI's VAE object doesn't expose config, so we use
-    hardcoded FLUX.1 values.
+    Note: KSampler already produces latents in the correct scale for FLUX VAE.
+    This helper only handles shape permutation if needed, without any additional
+    scaling or shifting that would corrupt the latent values.
     """
 
     def __init__(self, vae):
         self.vae = vae
-        # FLUX.1 VAE hardcoded configuration values
-        # These are the standard values for FLUX.1-dev
-        self.shift_factor = 0.1159
-        self.scaling_factor = 0.3611
 
     def encode(self, images: torch.Tensor) -> torch.Tensor:
         """
-        Encode images to latents with FLUX scaling.
+        Encode images to latents.
 
         Args:
-            images: Tensor of shape (B, C, H, W), normalized to [-1, 1]
+            images: Tensor of shape (B, C, H, W), normalized to [0, 1]
 
         Returns:
             Latents of shape (B, 16, H//8, W//8)
         """
         with torch.no_grad():
-            # ComfyUI's VAE.encode returns latents directly
+            # ComfyUI's VAE.encode returns latents in the correct scale
+            # No additional scaling needed - KSampler expects these values as-is
             latents = self.vae.encode(images)
-            latents = (latents - self.shift_factor) * self.scaling_factor
         return latents
 
     def decode(self, latents: torch.Tensor) -> torch.Tensor:
         """
-        Decode latents to images with FLUX scaling.
+        Decode latents to images.
 
         Args:
             latents: Tensor of shape (B, 16, H//8, W//8)
 
         Returns:
-            Images of shape (B, C, H, W), normalized to [-1, 1]
+            Images of shape (B, C, H, W), normalized to [0, 1]
         """
         with torch.no_grad():
-            # Reverse the scaling before decoding
-            latents = (latents / self.scaling_factor) + self.shift_factor
-            # ComfyUI's VAE.decode returns images directly
+            # ComfyUI's VAE.decode returns images in [0, 1] range
+            # No scaling needed - latents from KSampler are already in correct scale
             images = self.vae.decode(latents)
         return images
 
